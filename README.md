@@ -4,6 +4,59 @@ A token launch on Ethereum using a **Dutch auction**: the price of a new ERC20 t
 
 This is our group project for SC4053 (Option 2: Dutch Auction dApp).
 
+## Project status
+
+Deadline assumed **Tue 10 Nov 2026**. Tick items as they are done.
+
+| Part | Status |
+| --- | --- |
+| Rules / spec (`spec.md`) | Done, **team sign-off needed** |
+| Contracts (`contracts/`) | Done: 32 tests pass, 100% coverage, Slither checked |
+| Frontend (`frontend/`) | Done: preview mode + live contract mode with MetaMask |
+| Local test (Anvil + MetaMask) | Done by AI in a headless browser; **each member to try once** |
+| Sepolia deployment + team demo | **To do** |
+| Reentrancy bonus demo | Test done; **side-by-side vulnerable demo to do** |
+| AI Audit Report | **To do** (evidence and logs are ready) |
+
+### Remaining work
+
+**1. Everyone: set up and try it locally (Sun 1 Nov)**
+- [ ] Install Foundry (Git Bash) and MetaMask, clone the repo, `git submodule update --init --recursive`
+- [ ] `cd contracts && forge test` shows 32 passed
+- [ ] Run one auction on Anvil with the website ([steps](#run-the-frontend-against-a-local-contract-anvil))
+- [ ] Read `spec.md`, suggest changes, tick your name in its sign-off
+
+**2. Sepolia demo (by Fri 6 Nov)**
+- [ ] Each member gets ~0.1 Sepolia ETH from a faucet (Google Cloud, QuickNode, or the PoW faucet)
+- [ ] Deploy and verify on Etherscan ([steps](#deploy-to-sepolia))
+- [ ] Put the address and deploy block in `frontend/.env.local`, `VITE_CHAIN=sepolia`
+- [ ] Run a full 20-minute auction with all 3 wallets: start, bids, sell-out, finalize, everyone claims
+- [ ] Deploy a second auction and let time run out to show burning
+- [ ] Save transaction hashes and screenshots in `report/evidence/`
+
+**3. Bonus: reentrancy demo (member C, by Sat 7 Nov)**
+- [ ] A deliberately vulnerable copy of `claim()` (no guard, pays before clearing state) and a test or script showing the attacker drains it
+- [ ] The same attacker against `DutchAuction` is blocked (already in `test/Reentrancy.t.sol`)
+- [ ] Screenshot both results for the report
+
+**4. AI Audit Report (drafts by Sun 8 Nov)**
+
+| Section | Lead | Main sources |
+| --- | --- | --- |
+| 1. Initial Specification & System Scope | C | `spec.md` (note honestly that Claude drafted it from the brief) |
+| 2. Development Methodology & AI Tooling | C | Tools used, who did what, `spec.md` as the spec file given to AI |
+| 3. Specification Engineering & Prompt Logs | C | `ai-logs/` |
+| 4. AI-Generated Architecture | A | Contract interface, frontend hook design |
+| 5. Problems & Vulnerability Analysis | A + B | "Problems found" in `ai-logs/`, each with why / impact / fix / evidence |
+| 6. Validation & Testing Strategy | C | `report/evidence/` (tests, coverage, Slither), Anvil and Sepolia runs |
+| 7. Improvements & Refinements | B | Gas buffer, readable errors, ABI sync, reading prices from the contract |
+| 8. Lessons Learned | All | 2–3 points each |
+
+**5. Finish (Mon 9 – Tue 10 Nov)**
+- [ ] Fill in names in [Team](#team)
+- [ ] Rehearsal: someone who did not write the code clones the repo and follows only this README
+- [ ] Submit code + report; complete peer evaluation
+
 ## How the auction works
 
 1. We create a fixed supply of a new ERC20 token (working name **Tulip, TLP**). The whole supply sits in the auction contract.
@@ -16,9 +69,9 @@ This is our group project for SC4053 (Option 2: Dutch Auction dApp).
 7. If 20 minutes pass without clearing, the clearing price is the reserve price. Unsold tokens are **burned**.
 8. After the auction ends, each bidder calls `claim()` to withdraw their tokens and any refund (pull payments, no loops over bidders).
 
-### Planned parameters
+### Parameters
 
-These live in [`frontend/src/config.ts`](frontend/src/config.ts) and must match the deployed contract.
+Set in [`contracts/script/Deploy.s.sol`](contracts/script/Deploy.s.sol). In live mode the frontend reads them from the contract; [`frontend/src/config.ts`](frontend/src/config.ts) is only used in preview mode.
 
 | Parameter | Value |
 | --- | --- |
@@ -205,13 +258,32 @@ forge script script/Deploy.s.sol --rpc-url http://127.0.0.1:8545 --broadcast \
 
 That key is Anvil's public test account 0, safe only on Anvil. Add `START_AUCTION=true` in front of the command to start the 20-minute timer right away. The script prints the `DutchAuction` address and the deploy block for `frontend/.env.local`.
 
-**Deploy to Sepolia:** never paste a real private key into a command or a file in this repo. Store it encrypted once, then refer to it by name:
+#### Deploy to Sepolia
 
-```bash
-cast wallet import deployer --interactive         # paste the key of a wallet with Sepolia ETH
-forge script script/Deploy.s.sol --rpc-url https://ethereum-sepolia-rpc.publicnode.com \
-  --account deployer --broadcast
-```
+Never paste a real private key into a command or a file in this repo. Use a MetaMask account made only for this project.
+
+1. **Store the deployer key encrypted** (once). In MetaMask: account menu → Account details → Show private key. Then:
+   ```bash
+   cast wallet import deployer --interactive    # paste the key, then choose a password
+   ```
+2. **Get an Etherscan API key** (free) at [etherscan.io/myapikey](https://etherscan.io/myapikey), so the contract code is published and readable by anyone.
+3. **Deploy and verify** (from `contracts/`):
+   ```bash
+   export ETHERSCAN_API_KEY=<your key>
+   forge script script/Deploy.s.sol --rpc-url https://ethereum-sepolia-rpc.publicnode.com \
+     --account deployer --broadcast --verify
+   ```
+   Note the printed `DutchAuction` address and `Deploy block`.
+4. **Point the frontend at it** in `frontend/.env.local`, then restart `npm run dev`:
+   ```
+   VITE_CHAIN=sepolia
+   VITE_AUCTION_ADDRESS=0x...
+   VITE_AUCTION_DEPLOY_BLOCK=<deploy block>
+   ```
+5. **Run the auction:** the deployer account clicks **Start auction (owner only)**. Bidding then lasts exactly 20 minutes.
+6. **Afterwards:** the owner can collect the sale ETH with `cast send <auction> "withdrawProceeds()" --account deployer --rpc-url https://ethereum-sepolia-rpc.publicnode.com`.
+
+The public RPC can be slow or rate-limited. If so, use a free Alchemy or Infura Sepolia URL in both the `--rpc-url` above and `VITE_SEPOLIA_RPC_URL`.
 
 #### Known limitations
 
