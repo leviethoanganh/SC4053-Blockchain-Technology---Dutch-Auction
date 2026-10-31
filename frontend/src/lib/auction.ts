@@ -164,6 +164,18 @@ export function allocate(outcome: Outcome, address: string): Allocation {
   return { committed, tokens, refund: committed - cost }
 }
 
+/**
+ * One bidder's settlement, exactly as DutchAuction.claim() computes it:
+ * tokens round down, cost rounds up, the rest is refunded.
+ * `excess` is the unused part of the threshold bid (0 for everyone else).
+ */
+export function settle(committed: bigint, excess: bigint, clearingPrice: bigint): { tokens: bigint; refund: bigint } {
+  const usable = committed - excess
+  const tokens = tokensFor(usable, clearingPrice)
+  const cost = ceilDiv(tokens * clearingPrice, WAD)
+  return { tokens, refund: committed - cost }
+}
+
 /** Tokens sold in total once the auction has ended. */
 export function tokensSold(p: AuctionParams, outcome: Outcome): bigint {
   if (outcome.clearingPrice === null) return 0n

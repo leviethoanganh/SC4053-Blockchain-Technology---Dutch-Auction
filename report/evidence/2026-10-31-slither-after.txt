@@ -1,0 +1,52 @@
+# Slither 0.11.6 AFTER fix (ETH sent inline to msg.sender)
+'forge clean' running (wd: contracts)
+'forge config --json' running
+'forge build --build-info --deny never --skip ./test/** ./script/** --force' running (wd: contracts)
+INFO:Detectors:
+Detector: incorrect-equality
+DutchAuction._soldOutByDemand() (src/DutchAuction.sol#253-257) uses a dangerous strict equality:
+	- startTime == 0 || totalCommitted == 0 (src/DutchAuction.sol#254)
+DutchAuction.bid() (src/DutchAuction.sol#155-173) uses a dangerous strict equality:
+	- startTime == 0 (src/DutchAuction.sol#156)
+DutchAuction.finalize() (src/DutchAuction.sol#181-205) uses a dangerous strict equality:
+	- startTime == 0 (src/DutchAuction.sol#182)
+DutchAuction.priceAt(uint256) (src/DutchAuction.sol#119-124) uses a dangerous strict equality:
+	- startTime == 0 || t <= startTime (src/DutchAuction.sol#120)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#dangerous-strict-equalities
+INFO:Detectors:
+Detector: timestamp
+DutchAuction.start() (src/DutchAuction.sol#107-112) uses timestamp for comparisons
+	Dangerous comparisons:
+	- startTime != 0 (src/DutchAuction.sol#108)
+DutchAuction.priceAt(uint256) (src/DutchAuction.sol#119-124) uses timestamp for comparisons
+	Dangerous comparisons:
+	- startTime == 0 || t <= startTime (src/DutchAuction.sol#120)
+	- elapsed >= DURATION (src/DutchAuction.sol#122)
+DutchAuction.isSoldOut() (src/DutchAuction.sol#138-140) uses timestamp for comparisons
+	Dangerous comparisons:
+	- soldOut || _soldOutByDemand() (src/DutchAuction.sol#139)
+DutchAuction.hasEnded() (src/DutchAuction.sol#143-145) uses timestamp for comparisons
+	Dangerous comparisons:
+	- startTime != 0 && (block.timestamp >= endTime || isSoldOut()) (src/DutchAuction.sol#144)
+DutchAuction.bid() (src/DutchAuction.sol#155-173) uses timestamp for comparisons
+	Dangerous comparisons:
+	- startTime == 0 (src/DutchAuction.sol#156)
+	- block.timestamp >= endTime (src/DutchAuction.sol#157)
+	- totalCommitted >= cost (src/DutchAuction.sol#167)
+DutchAuction.finalize() (src/DutchAuction.sol#181-205) uses timestamp for comparisons
+	Dangerous comparisons:
+	- startTime == 0 (src/DutchAuction.sol#182)
+	- block.timestamp < endTime (src/DutchAuction.sol#196)
+DutchAuction._soldOutByDemand() (src/DutchAuction.sol#253-257) uses timestamp for comparisons
+	Dangerous comparisons:
+	- startTime == 0 || totalCommitted == 0 (src/DutchAuction.sol#254)
+	- d >= reservePrice && currentPrice() <= d (src/DutchAuction.sol#256)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#block-timestamp
+INFO:Detectors:
+Detector: low-level-calls
+Low level call in DutchAuction.claim() (src/DutchAuction.sol#210-230):
+	- (ok,None) = address(msg.sender).call{value: refund}() (src/DutchAuction.sol#227)
+Low level call in DutchAuction.withdrawProceeds() (src/DutchAuction.sol#234-241):
+	- (ok,None) = address(msg.sender).call{value: amount}() (src/DutchAuction.sol#239)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#low-level-calls
+INFO:Slither:. analyzed (19 contracts with 102 detectors), 13 result(s) found

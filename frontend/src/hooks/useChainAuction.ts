@@ -1,33 +1,33 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { zeroAddress } from 'viem'
 import { useBlock, usePublicClient, useReadContracts, useWriteContract } from 'wagmi'
-import { AUCTION_PARAMS as P, NETWORK_NAME, TARGET_CHAIN } from '../config'
+import { AUCTION_PARAMS, NETWORK_NAME, TARGET_CHAIN } from '../config'
 import { AUCTION_DEPLOY_BLOCK, auction } from '../contracts/auction'
 import {
-  allocate,
   costOfSupply,
   demandPrice,
   priceAt,
-  resolveAuction,
+  settle,
   timeWhenPriceReaches,
   tokensFor,
-  tokensSold,
-  type Outcome,
-  type RawBid,
+  type AuctionParams,
+  type Phase,
 } from '../lib/auction'
 import { describeTxError } from '../lib/txErrors'
-import type { AuctionView, TxAction, TxState, UseAuctionResult } from '../types'
+import type { AuctionView, FeedBid, TxAction, TxState, UseAuctionResult } from '../types'
 import { useWallet } from '../wallet/WalletContext'
 
 /**
  * Live auction data from the deployed DutchAuction contract.
  *
- * - Reads (startTime, totalCommitted, clearingPrice, finalized) refresh on every new block.
- * - The bid list comes from BidPlaced events; your claim status from Claimed events.
- * - The clock follows BLOCK time, not your computer's clock, so the price shown
- *   matches what the contract will charge.
- * - Every write is simulated first, so a bid the contract would reject shows the
- *   contract's reason before MetaMask even opens.
+ * - Contract state (prices, totals, sold-out flag, threshold bidder) refreshes every block.
+ * - The bid list comes from BidPlaced events; your claim from Claimed events;
+ *   sold/burned from AuctionFinalized.
+ * - The clock follows BLOCK time, not this computer's clock, so the price shown is
+ *   the price the contract will use.
+ * - Every write is simulated first (shows the contract's error before MetaMask opens)
+ *   and sent with a 20% gas buffer.
  */
 
 const chainId = TARGET_CHAIN.id
@@ -41,9 +41,9 @@ export function useChainAuction(): UseAuctionResult {
   const write = useWriteContract()
   const [tx, setTx] = useState<TxState>({ status: 'idle' })
 
-  // ---- Block-time clock ---------------------------------------------------
+  // ---- Block-time clock -----------------------------------------------------
   const { data: block } = useBlock({ chainId, watch: true })
-  const offsetRef = useRef(0) // seconds the chain is ahead of this computer (Anvil time warps)
+  const offsetRef = useRef(0) // seconds the chain is ahead of this computer (e.g. Anvil time warps)
   useEffect(() => {
     if (block) offsetRef.current = Math.max(0, Number(block.timestamp) - Date.now() / 1000)
   }, [block])
@@ -54,7 +54,7 @@ export function useChainAuction(): UseAuctionResult {
   }, [])
   const chainNow = wallSec + offsetRef.current
 
-  // ---- Contract state -------------------------------------------------------
+  // ---- Contract state ---------------------------------------------------------
   const reads = useReadContracts({
     allowFailure: false,
     contracts: [
@@ -62,6 +62,13 @@ export function useChainAuction(): UseAuctionResult {
       { ...auction, chainId, functionName: 'totalCommitted' },
       { ...auction, chainId, functionName: 'clearingPrice' },
       { ...auction, chainId, functionName: 'finalized' },
+      { ...auction, chainId, functionName: 'isSoldOut' },
+      { ...auction, chainId, functionName: 'thresholdBidder' },
+      { ...auction, chainId, functionName: 'thresholdExcess' },
+      { ...auction, chainId, functionName: 'startPrice' },
+      { ...auction, chainId, functionName: 'reservePrice' },
+      { ...auction, chainId, functionName: 'totalSupply' },
+      { ...auction, chainId, functionName: 'DURATION' },
     ],
   })
   const { refetch: refetchReads } = reads
@@ -100,61 +107,78 @@ export function useChainAuction(): UseAuctionResult {
     queryFn: () => client!.getContractEvents({ ...auction, eventName: 'AuctionFinalized', fromBlock: AUCTION_DEPLOY_BLOCK }),
   })
 
-  // ---- Build the view ---------------------------------------------------
+  // ---- Build the view -----------------------------------------------------------
   const view: AuctionView = useMemo(() => {
-    const [startTimeRaw = 0n, totalCommittedRaw = 0n, chainClearing = 0n, finalized = false] = reads.data ?? []
-    const startTime = Number(startTimeRaw)
+    const d = reads.data
+    // Auction settings come from the contract itself; config.ts is only a fallback while loading.
+    const P: AuctionParams = d
+      ? { startPrice: d[7], reservePrice: d[8], totalSupply: d[9], durationSec: Number(d[10]) }
+      : AUCTION_PARAMS
+    const startTime = Number(d?.[0] ?? 0n)
+    const totalCommitted = d?.[1] ?? 0n
+    const chainClearing = d?.[2] ?? 0n
+    const finalized = d?.[3] ?? false
+    const chainSoldOut = d?.[4] ?? false
+    const thresholdBidder = d?.[5] ?? zeroAddress
+    const thresholdExcess = d?.[6] ?? 0n
+
     const started = startTime > 0
     const elapsedSec = started ? Math.max(0, Math.floor(chainNow - startTime)) : 0
-
-    // Bid list from events. The contract emits the price at bid time, and the
-    // price falls linearly, so the second it happened can be read back from it.
-    const bids: RawBid[] = (bidLogs.data ?? []).map((log) => ({
-      id: `${log.transactionHash}-${log.logIndex}`,
-      bidder: log.args.bidder!,
-      amount: log.args.amount!,
-      at: Math.min(timeWhenPriceReaches(P, log.args.price!), elapsedSec),
-    }))
-    const local = resolveAuction(P, bids, Math.max(elapsedSec, ...bids.map((b) => b.at)), started)
-
-    // The chain is the source of truth for the clearing price when it has one.
-    let phase = local.phase
-    if (started && phase === 'live' && (chainClearing > 0n || finalized)) phase = 'cleared'
-    const outcome: Outcome = {
-      ...local,
-      phase,
-      clearingPrice: chainClearing > 0n ? chainClearing : local.clearingPrice,
-      totalCommitted: totalCommittedRaw,
-    }
-    if (phase === 'cleared' && outcome.clearingPrice !== null && outcome.thresholdBidId === null && local.accepted.length > 0) {
-      // Sold out by a bid: the last bid that crossed the line gets the excess back.
-      const cost = costOfSupply(P, outcome.clearingPrice)
-      if (totalCommittedRaw > cost) {
-        outcome.thresholdBidId = local.accepted.at(-1)!.id
-        outcome.thresholdExcess = totalCommittedRaw - cost
-      }
-    }
-
-    const ended = phase === 'cleared' || phase === 'time-up'
     const livePrice = started ? priceAt(P, elapsedSec) : P.startPrice
-    const currentPrice = ended && outcome.clearingPrice !== null ? outcome.clearingPrice : livePrice
+    const demand = demandPrice(P, totalCommitted)
 
-    const finalEvent = finalLogs.data?.at(-1)?.args
-    const sold = finalized ? (finalEvent?.sold ?? tokensSold(P, outcome)) : null
+    // Sold out by a bid (case A), or the price has fallen to meet demand (case B).
+    const soldOutByDemand = started && totalCommitted > 0n && demand >= P.reservePrice && livePrice <= demand
+    let phase: Phase = 'not-started'
+    if (started) {
+      if (chainSoldOut || soldOutByDemand) phase = 'cleared'
+      else if (finalized || elapsedSec >= P.durationSec) phase = 'time-up'
+      else phase = 'live'
+    }
+    const ended = phase === 'cleared' || phase === 'time-up'
 
+    // Clearing price: from the contract once set; otherwise what finalize() will set.
+    let clearingPrice: bigint | null = chainClearing > 0n ? chainClearing : null
+    if (clearingPrice === null && phase === 'cleared') clearingPrice = demand
+    if (clearingPrice === null && phase === 'time-up') clearingPrice = P.reservePrice
+    const currentPrice = ended && clearingPrice !== null ? clearingPrice : livePrice
+
+    // Bid list. The contract emits the price at bid time, and the price falls linearly,
+    // so the second of each bid can be read back from its price.
+    const logs = bidLogs.data ?? []
+    const isThresholdBidder = (a: string) => thresholdBidder !== zeroAddress && a.toLowerCase() === thresholdBidder.toLowerCase()
+    let lastThresholdIndex = -1
+    logs.forEach((l, i) => {
+      if (isThresholdBidder(l.args.bidder!)) lastThresholdIndex = i
+    })
+    const bids: FeedBid[] = logs
+      .map((log, i) => ({
+        id: `${log.transactionHash}-${log.logIndex}`,
+        bidder: log.args.bidder!,
+        amount: log.args.amount!,
+        price: log.args.price!,
+        at: Math.min(timeWhenPriceReaches(P, log.args.price!), Math.max(elapsedSec, 0)),
+        isMine: me !== undefined && log.args.bidder!.toLowerCase() === me.toLowerCase(),
+        isThreshold: i === lastThresholdIndex,
+      }))
+      .reverse()
+
+    // Your position
     let position: AuctionView['position'] = null
     if (me) {
+      const committed = bids.filter((b) => b.isMine).reduce((sum, b) => sum + b.amount, 0n)
       const claimLog = myClaims.data?.at(-1)?.args
-      const a = allocate(outcome, me)
       if (claimLog) {
-        position = { committed: a.committed, tokens: claimLog.tokens!, refund: claimLog.refund!, isEstimate: false, claimed: true }
-      } else if (ended) {
-        // The clearing price is fixed once bidding closes, so these are final numbers.
-        position = { ...a, isEstimate: false, claimed: false }
+        position = { committed, tokens: claimLog.tokens!, refund: claimLog.refund!, isEstimate: false, claimed: true }
+      } else if (ended && clearingPrice !== null) {
+        const excess = isThresholdBidder(me) ? thresholdExcess : 0n
+        position = { committed, ...settle(committed, excess, clearingPrice), isEstimate: false, claimed: false }
       } else {
-        position = { committed: a.committed, tokens: tokensFor(a.committed, livePrice), refund: 0n, isEstimate: true, claimed: false }
+        position = { committed, tokens: tokensFor(committed, livePrice), refund: 0n, isEstimate: true, claimed: false }
       }
     }
+
+    const finalEvent = finalLogs.data?.at(-1)?.args
 
     return {
       mode: 'chain',
@@ -166,26 +190,20 @@ export function useChainAuction(): UseAuctionResult {
       startPrice: P.startPrice,
       reservePrice: P.reservePrice,
       currentPrice,
-      clearingPrice: outcome.clearingPrice,
+      clearingPrice,
       totalSupply: P.totalSupply,
-      totalCommitted: totalCommittedRaw,
-      demandPrice: demandPrice(P, totalCommittedRaw),
+      totalCommitted,
+      demandPrice: demand,
       costAtCurrentPrice: costOfSupply(P, currentPrice),
-      tokensSold: sold,
-      tokensBurned: sold === null ? null : (finalEvent?.burned ?? P.totalSupply - sold),
-      bids: outcome.accepted
-        .map((b) => ({
-          ...b,
-          isMine: me !== undefined && b.bidder.toLowerCase() === me.toLowerCase(),
-          isThreshold: b.id === outcome.thresholdBidId,
-        }))
-        .reverse(),
+      tokensSold: finalized ? (finalEvent?.sold ?? null) : null,
+      tokensBurned: finalized ? (finalEvent?.burned ?? null) : null,
+      bids,
       account: me ? { address: me, balance: wallet.balance ?? 0n } : null,
       position,
     }
   }, [reads.data, chainNow, bidLogs.data, myClaims.data, finalLogs.data, me, wallet.balance])
 
-  // ---- Writes -------------------------------------------------------------
+  // ---- Writes -------------------------------------------------------------------
   const refreshAll = useCallback(
     () => Promise.all([refetchReads(), bidLogs.refetch(), myClaims.refetch(), finalLogs.refetch()]),
     [refetchReads, bidLogs, myClaims, finalLogs],
@@ -203,7 +221,7 @@ export function useChainAuction(): UseAuctionResult {
       }
       try {
         setTx({ status: 'pending', action, message: 'Checking with the contract…' })
-        // Dry run: surfaces the contract's revert reason before MetaMask opens.
+        // Dry run: surfaces the contract's error before MetaMask opens.
         await client.simulateContract({ ...auction, functionName, value, account: me } as never)
         // Gas depends on block time here (the price formula takes a shortcut at
         // second 0), so an exact estimate can run out of gas one block later.

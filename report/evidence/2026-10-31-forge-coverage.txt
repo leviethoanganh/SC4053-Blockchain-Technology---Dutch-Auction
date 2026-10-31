@@ -1,0 +1,10 @@
+# forge coverage  (2026-10-31T14:47Z)
+Ran 1 test for test/Reentrancy.t.sol:ReentrancyTest
+Ran 31 tests for test/DutchAuction.t.sol:DutchAuctionTest
+Ran 2 test suites in 871.34ms (871.11ms CPU time): 32 tests passed, 0 failed, 0 skipped (32 total tests)
+| File                 | % Lines         | % Statements      | % Branches      | % Funcs         |
+| src/AuctionToken.sol | 100.00% (2/2)   | 100.00% (1/1)     | N/A (0/0)       | 100.00% (1/1)   |
+|----------------------+-----------------+-------------------+-----------------+-----------------|
+| src/DutchAuction.sol | 100.00% (84/84) | 100.00% (120/120) | 100.00% (27/27) | 100.00% (13/13) |
+|----------------------+-----------------+-------------------+-----------------+-----------------|
+| Total                | 100.00% (86/86) | 100.00% (121/121) | 100.00% (27/27) | 100.00% (14/14) |

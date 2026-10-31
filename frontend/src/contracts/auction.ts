@@ -1,29 +1,13 @@
-import { parseAbi, type Address } from 'viem'
+import type { Address } from 'viem'
+import { dutchAuctionAbi } from './DutchAuction.abi'
 
 /**
- * The DutchAuction contract, as the frontend sees it.
+ * The deployed DutchAuction contract.
  *
- * This ABI is written from the interface agreed in the README. Once the
- * contracts are built (`forge build`), replace it with the real ABI from
- * contracts/out/DutchAuction.sol/DutchAuction.json so names always match, and
- * so custom errors show up with their names in the UI.
+ * The ABI is generated from the Foundry build (contracts/out) by `npm run sync-abi`,
+ * so function, event and error names always match the Solidity code.
  */
-export const auctionAbi = parseAbi([
-  'function start()',
-  'function bid() payable',
-  'function finalize()',
-  'function claim()',
-  'function currentPrice() view returns (uint256)',
-  'function startTime() view returns (uint256)',
-  'function endTime() view returns (uint256)',
-  'function clearingPrice() view returns (uint256)',
-  'function totalCommitted() view returns (uint256)',
-  'function commitments(address) view returns (uint256)',
-  'function finalized() view returns (bool)',
-  'event BidPlaced(address indexed bidder, uint256 amount, uint256 price)',
-  'event AuctionFinalized(uint256 clearingPrice, uint256 sold, uint256 burned)',
-  'event Claimed(address indexed bidder, uint256 tokens, uint256 refund)',
-])
+export const auctionAbi = dutchAuctionAbi
 
 const rawAddress = import.meta.env.VITE_AUCTION_ADDRESS?.trim()
 
@@ -33,7 +17,7 @@ export const AUCTION_ADDRESS: Address | undefined = rawAddress && /^0x[0-9a-fA-F
 /**
  * Block the contract was deployed in, from VITE_AUCTION_DEPLOY_BLOCK.
  * Event searches start here. On Sepolia, public RPCs refuse to search from
- * block 0, so set this to the block number shown on Etherscan for the deploy.
+ * block 0, so set this to the block number printed by the deploy script.
  */
 export const AUCTION_DEPLOY_BLOCK = BigInt(import.meta.env.VITE_AUCTION_DEPLOY_BLOCK?.trim() || '0')
 
