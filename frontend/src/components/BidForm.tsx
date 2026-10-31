@@ -37,9 +37,16 @@ export function BidForm({ view, actions, tx }: { view: AuctionView; actions: Auc
 
   return (
     <form className="bid" onSubmit={onSubmit} noValidate>
-      <label htmlFor={inputId} className="bid__label">
-        Your bid
-      </label>
+      <div className="bid__top">
+        <label htmlFor={inputId} className="bid__label">
+          Your bid
+        </label>
+        {view.account && (
+          <span className="bid__balance">
+            {view.mode === 'preview' ? 'Preview balance' : 'Balance'} {formatUnits(view.account.balance, 4)} ETH
+          </span>
+        )}
+      </div>
       <div className={`bid__field${inputError || tooMuch ? ' bid__field--error' : ''}`}>
         <input
           id={inputId}

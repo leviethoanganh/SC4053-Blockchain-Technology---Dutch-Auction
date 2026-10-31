@@ -1,6 +1,6 @@
 import { NETWORK_NAME, TOKEN } from '../config'
-import { formatUnits, shortAddress } from '../lib/format'
-import type { AuctionActions, AuctionView } from '../types'
+import { useWallet } from '../wallet/WalletContext'
+import { WalletButton } from './WalletButton'
 
 export function TulipMark() {
   return (
@@ -12,7 +12,11 @@ export function TulipMark() {
   )
 }
 
-export function Header({ view, actions }: { view: AuctionView; actions: AuctionActions }) {
+export function Header() {
+  const w = useWallet()
+  const dot = !w.isConnected ? 'idle' : w.wrongNetwork ? 'warn' : 'ok'
+  const dotTitle = !w.isConnected ? 'Wallet not connected' : w.wrongNetwork ? 'MetaMask is on another network' : `Connected to ${NETWORK_NAME}`
+
   return (
     <header className="header">
       <div className="header__brand">
@@ -22,20 +26,11 @@ export function Header({ view, actions }: { view: AuctionView; actions: AuctionA
         </span>
       </div>
       <div className="header__wallet">
-        <span className="pill" title="Network the contract runs on">
-          <span className="pill__dot" aria-hidden="true" />
+        <span className="pill" title={dotTitle}>
+          <span className={`pill__dot pill__dot--${dot}`} aria-hidden="true" />
           {NETWORK_NAME}
         </span>
-        {view.account ? (
-          <button className="account" onClick={actions.disconnect} title="Disconnect wallet">
-            <span className="account__balance">{formatUnits(view.account.balance, 4)} ETH</span>
-            <span className="account__address">{shortAddress(view.account.address)}</span>
-          </button>
-        ) : (
-          <button className="button button--primary" onClick={actions.connect}>
-            Connect wallet
-          </button>
-        )}
+        <WalletButton />
       </div>
     </header>
   )

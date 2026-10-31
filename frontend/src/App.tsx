@@ -8,6 +8,7 @@ import { HowItWorks } from './components/HowItWorks'
 import { PositionPanel } from './components/PositionPanel'
 import { PriceClock } from './components/PriceClock'
 import { StatusHeading } from './components/StatusHeading'
+import { WalletNotice } from './components/WalletNotice'
 import { useAuction } from './hooks/useAuction'
 
 export default function App() {
@@ -16,7 +17,8 @@ export default function App() {
 
   return (
     <div className="page">
-      <Header view={view} actions={actions} />
+      <Header />
+      <WalletNotice />
 
       <main className="main">
         <section className="stage">

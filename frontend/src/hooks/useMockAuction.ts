@@ -12,14 +12,18 @@ import {
 } from '../lib/auction'
 import { parseEth } from '../lib/format'
 import type { AuctionView, TxAction, TxState, UseAuctionResult } from '../types'
+import { useWallet } from '../wallet/WalletContext'
 
 /**
  * Browser-only simulation of the auction contract, for building the UI before
  * deployment. Time runs for real; demo controls can skip ahead.
+ *
+ * The wallet connection is REAL (MetaMask via wagmi): bids are recorded under
+ * your real address. The auction itself and the bidding balance are simulated,
+ * so no ETH ever leaves your wallet in preview mode.
  */
 
-const MY_ADDRESS = '0x7A3f9c0B21dE4a56C8f1e2B3d4C5a6b7C8d9c21D'
-const MY_START_BALANCE = parseEth('1.5')
+const PREVIEW_BALANCE = parseEth('1.5')
 const STARTED_MINUTES_AGO = 6
 
 // Other bidders. They appear in the feed as the clock reaches their time.
@@ -40,8 +44,10 @@ export function useMockAuction(): UseAuctionResult {
   const [offsetMs, setOffsetMs] = useState(0)
   const [nowMs, setNowMs] = useState(() => Date.now())
   const [myBids, setMyBids] = useState<RawBid[]>([])
-  const [connected, setConnected] = useState(false)
-  const [balance, setBalance] = useState(MY_START_BALANCE)
+  const wallet = useWallet()
+  const me = wallet.isConnected ? wallet.address : undefined
+  const connected = Boolean(me)
+  const [balance, setBalance] = useState(PREVIEW_BALANCE)
   const [finalized, setFinalized] = useState(false)
   const [claimed, setClaimed] = useState(false)
   const [tx, setTx] = useState<TxState>({ status: 'idle' })
@@ -62,8 +68,8 @@ export function useMockAuction(): UseAuctionResult {
     const sold = finalized ? tokensSold(P, outcome) : null
 
     let position: AuctionView['position'] = null
-    if (connected) {
-      const a = allocate(outcome, MY_ADDRESS)
+    if (me) {
+      const a = allocate(outcome, me)
       position = ended
         ? { ...a, isEstimate: false, claimed }
         : { committed: a.committed, tokens: tokensFor(a.committed, livePrice), refund: 0n, isEstimate: true, claimed }
@@ -89,14 +95,14 @@ export function useMockAuction(): UseAuctionResult {
       bids: outcome.accepted
         .map((b) => ({
           ...b,
-          isMine: b.bidder === MY_ADDRESS,
+          isMine: me !== undefined && b.bidder.toLowerCase() === me.toLowerCase(),
           isThreshold: b.id === outcome.thresholdBidId,
         }))
         .reverse(),
-      account: connected ? { address: MY_ADDRESS, balance } : null,
+      account: me ? { address: me, balance } : null,
       position,
     }
-  }, [outcome, elapsedSec, finalized, connected, balance, claimed])
+  }, [outcome, elapsedSec, finalized, me, balance, claimed])
 
   const run = useCallback(async (action: TxAction, pending: string, ms: number, work: () => string) => {
     setTx({ status: 'pending', action, message: pending })
@@ -118,21 +124,21 @@ export function useMockAuction(): UseAuctionResult {
   const actions = useMemo(
     () => ({
       connect: () => {
-        setConnected(true)
         setTx({ status: 'idle' })
+        wallet.connect()
       },
       disconnect: () => {
-        setConnected(false)
         setTx({ status: 'idle' })
+        wallet.disconnect()
       },
       bid: async (amountWei: bigint) => {
-        if (!connected) return reject('bid', 'Connect your wallet first.')
+        if (!connected || !me) return reject('bid', 'Connect your wallet first.')
         if (view.phase !== 'live') return reject('bid', 'Bidding is closed. The auction has ended.')
         if (amountWei <= 0n) return reject('bid', 'Enter an amount above 0 ETH.')
         if (amountWei > balance) return reject('bid', 'Your wallet does not have enough ETH for this bid.')
         return run('bid', 'Confirm the bid in your wallet…', 1200, () => {
           const at = Math.max(0, Math.floor((Date.now() + offsetMs - startMs) / 1000))
-          setMyBids((prev) => [...prev, { id: `me-${prev.length + 1}`, bidder: MY_ADDRESS, amount: amountWei, at }])
+          setMyBids((prev) => [...prev, { id: `me-${prev.length + 1}`, bidder: me, amount: amountWei, at }])
           setBalance((b) => b - amountWei)
           return 'Bid placed.'
         })
@@ -156,7 +162,7 @@ export function useMockAuction(): UseAuctionResult {
         })
       },
     }),
-    [connected, view, balance, offsetMs, startMs, run],
+    [connected, me, wallet, view, balance, offsetMs, startMs, run],
   )
 
   const demo = useMemo(
@@ -167,7 +173,7 @@ export function useMockAuction(): UseAuctionResult {
         setNowMs(Date.now())
         setOffsetMs(0)
         setMyBids([])
-        setBalance(MY_START_BALANCE)
+        setBalance(PREVIEW_BALANCE)
         setFinalized(false)
         setClaimed(false)
         setTx({ status: 'idle' })

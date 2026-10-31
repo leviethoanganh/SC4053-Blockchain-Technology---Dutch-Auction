@@ -162,7 +162,38 @@ input {
   width: 8px;
   height: 8px;
   border-radius: 50%;
+  background: var(--glaze);
+}
+.pill__dot--ok {
   background: var(--good);
+}
+.pill__dot--warn {
+  background: var(--lamp);
+}
+
+/* ---------- Wallet notice (under the header) ---------- */
+
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  margin-top: 16px;
+  padding: 12px 12px 12px 18px;
+  border: 1px solid var(--lamp);
+  border-left-width: 4px;
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+
+.notice--error {
+  border-color: var(--tulip);
+}
+
+.notice__text {
+  flex: 1 1 280px;
+  font-weight: 500;
 }
 
 .account {
@@ -448,8 +479,21 @@ input {
   background: var(--surface);
 }
 
+.bid__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
 .bid__label {
   font-weight: 600;
+}
+
+.bid__balance {
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
 }
 
 .bid__field {

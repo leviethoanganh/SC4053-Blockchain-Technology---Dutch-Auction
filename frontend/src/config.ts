@@ -1,3 +1,4 @@
+import { foundry, sepolia } from 'wagmi/chains'
 import { WAD, parseEth } from './lib/format'
 import type { AuctionParams } from './lib/auction'
 
@@ -10,7 +11,10 @@ export const TOKEN = {
   symbol: 'TLP',
 }
 
-export const NETWORK_NAME = 'Sepolia'
+/** The network MetaMask must be on. Set VITE_CHAIN=anvil in .env.local for local testing. */
+export const TARGET_CHAIN = import.meta.env.VITE_CHAIN === 'anvil' ? foundry : sepolia
+
+export const NETWORK_NAME = TARGET_CHAIN.id === foundry.id ? 'Local Anvil' : 'Sepolia'
 
 export const AUCTION_PARAMS: AuctionParams = {
   totalSupply: 1_000n * WAD, // 1,000 TLP (18 decimals)

@@ -95,9 +95,32 @@ npm run dev
 
 Then open http://localhost:5173.
 
-The frontend currently runs in **preview mode**. It simulates an auction in the browser so we can build and test the UI before the contracts are deployed. The demo controls at the bottom of the page let you skip ahead in time, finalize the auction and reset it.
+The frontend currently runs in **preview mode**:
+
+- **Wallet connection is real.** "Connect wallet" opens MetaMask, the header shows your real address and Sepolia ETH balance, and a banner offers "Switch to Sepolia" if MetaMask is on another network.
+- **The auction is simulated** in the browser, with fake bidders and a 1.5 ETH preview balance, so no real ETH is sent. The demo controls at the bottom let you skip ahead, finalize and restart.
 
 When the contract is ready, we replace the mock hook in `frontend/src/hooks/useAuction.ts` with real contract calls (wagmi + viem). The components do not need to change.
+
+#### Settings (optional)
+
+Copy `frontend/.env.example` to `frontend/.env.local`:
+
+| Variable | Use |
+| --- | --- |
+| `VITE_CHAIN` | `sepolia` (default) or `anvil` to test against a local node at `http://127.0.0.1:8545` |
+| `VITE_SEPOLIA_RPC_URL` | Your own Alchemy/Infura URL if the public Sepolia RPC is slow |
+
+#### Frontend code map
+
+| Path | What it does |
+| --- | --- |
+| `src/wagmi.ts` | Networks (Sepolia, Anvil) and the MetaMask connector |
+| `src/wallet/WalletContext.tsx` | Shared wallet state: connect, disconnect, switch network, readable error messages |
+| `src/hooks/useAuction.ts` | The one switch between simulated and real contract data |
+| `src/hooks/useMockAuction.ts` | The browser simulation |
+| `src/lib/auction.ts` | Auction maths in bigint, mirroring the contract |
+| `src/components/` | UI pieces: price clock, bid form, position, bid list… |
 
 ### Contracts
 

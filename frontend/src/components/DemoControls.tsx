@@ -9,7 +9,8 @@ export function DemoControls({ demo }: { demo: Demo }) {
           Preview mode
         </h2>
         <p className="demo__text">
-          This page simulates the auction in your browser. No contract or real ETH is involved yet.
+          Your MetaMask connection is real. The auction, the other bidders and your 1.5 ETH preview balance are
+          simulated in this browser, so no real ETH is sent.
         </p>
       </div>
       <div className="demo__buttons">
