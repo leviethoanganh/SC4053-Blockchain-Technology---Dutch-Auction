@@ -95,12 +95,41 @@ npm run dev
 
 Then open http://localhost:5173.
 
-The frontend currently runs in **preview mode**:
+The frontend has two modes, chosen by `frontend/.env.local`:
 
-- **Wallet connection is real.** "Connect wallet" opens MetaMask, the header shows your real address and Sepolia ETH balance, and a banner offers "Switch to Sepolia" if MetaMask is on another network.
-- **The auction is simulated** in the browser, with fake bidders and a 1.5 ETH preview balance, so no real ETH is sent. The demo controls at the bottom let you skip ahead, finalize and restart.
+| Mode | When | What happens |
+| --- | --- | --- |
+| **Preview** | `VITE_AUCTION_ADDRESS` is empty (default) | The wallet connection is real, but the auction is simulated in the browser with fake bidders and a 1.5 ETH preview balance. Demo controls let you skip ahead. |
+| **Live** | `VITE_AUCTION_ADDRESS` is set | Reads the deployed `DutchAuction` contract and sends real transactions through MetaMask (start, bid, finalize, claim). |
 
-When the contract is ready, we replace the mock hook in `frontend/src/hooks/useAuction.ts` with real contract calls (wagmi + viem). The components do not need to change.
+Restart `npm run dev` after changing `.env.local`.
+
+#### Run the frontend against a local contract (Anvil)
+
+1. In **Git Bash**, start a local chain: `anvil --block-time 1`. Keep it running.
+2. Deploy the contracts to it, e.g. `forge script script/Deploy.s.sol --rpc-url http://127.0.0.1:8545 --broadcast --private-key <anvil key 0>`.
+3. Create `frontend/.env.local`:
+   ```
+   VITE_CHAIN=anvil
+   VITE_AUCTION_ADDRESS=0x...   # the DutchAuction address printed by the deploy
+   VITE_AUCTION_DEPLOY_BLOCK=0
+   ```
+4. In MetaMask, import 2–3 of the private keys that `anvil` prints (Account menu → Add account → Private key). **These keys are public test keys: never send real ETH to them.**
+5. `npm run dev`, connect, and click **Switch to Local Anvil** when the banner asks. If MetaMask complains about a nonce after you restart Anvil, use Settings → Advanced → Clear activity tab data.
+
+For Sepolia, set `VITE_CHAIN=sepolia`, the deployed address, and `VITE_AUCTION_DEPLOY_BLOCK` (the deploy block from Etherscan; public RPCs refuse to search events from block 0).
+
+#### What the frontend expects from the contract
+
+These are the assumptions in `frontend/src/hooks/useChainAuction.ts`. If the contract differs, tell the frontend owner.
+
+- Function, variable and event names exactly as in [Contract interface](#contract-interface-agreed-at-kickoff). After `forge build`, copy the real ABI into `frontend/src/contracts/auction.ts`.
+- `startTime()` is `0` until `start()` is called.
+- `BidPlaced.price` is the price at the moment of the bid. The page uses it to place the bid on the clock.
+- `clearingPrice()` is `0` until known. It can be set by the bid that sells out, or by `finalize()`.
+- `AuctionFinalized(clearingPrice, sold, burned)` and `Claimed(bidder, tokens, refund)` carry the real numbers. The page shows them.
+- Errors use `require(..., "reason")` or custom errors. The page shows the reason to the user.
+- The auction settings match `frontend/src/config.ts` (1,000 TLP, 0.001 → 0.0001 ETH, 20 minutes).
 
 #### Settings (optional)
 
@@ -109,6 +138,8 @@ Copy `frontend/.env.example` to `frontend/.env.local`:
 | Variable | Use |
 | --- | --- |
 | `VITE_CHAIN` | `sepolia` (default) or `anvil` to test against a local node at `http://127.0.0.1:8545` |
+| `VITE_AUCTION_ADDRESS` | Deployed `DutchAuction` address. Empty = preview mode |
+| `VITE_AUCTION_DEPLOY_BLOCK` | Block the auction was deployed in (needed on Sepolia) |
 | `VITE_SEPOLIA_RPC_URL` | Your own Alchemy/Infura URL if the public Sepolia RPC is slow |
 
 #### Frontend code map
@@ -118,7 +149,10 @@ Copy `frontend/.env.example` to `frontend/.env.local`:
 | `src/wagmi.ts` | Networks (Sepolia, Anvil) and the MetaMask connector |
 | `src/wallet/WalletContext.tsx` | Shared wallet state: connect, disconnect, switch network, readable error messages |
 | `src/hooks/useAuction.ts` | The one switch between simulated and real contract data |
+| `src/hooks/useChainAuction.ts` | Live data from the contract: reads, events, transactions |
 | `src/hooks/useMockAuction.ts` | The browser simulation |
+| `src/contracts/auction.ts` | Contract ABI, address and deploy block |
+| `src/lib/txErrors.ts` | Turns MetaMask and contract errors into readable messages |
 | `src/lib/auction.ts` | Auction maths in bigint, mirroring the contract |
 | `src/components/` | UI pieces: price clock, bid form, position, bid list… |
 

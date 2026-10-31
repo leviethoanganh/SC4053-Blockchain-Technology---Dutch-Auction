@@ -13,6 +13,7 @@ import { injected } from 'wagmi/connectors'
 export const wagmiConfig = createConfig({
   chains: [sepolia, foundry],
   connectors: [injected()], // the wallet extension in the browser, i.e. MetaMask
+  pollingInterval: 2_000, // how often to check for new blocks and receipts (default 4s)
   transports: {
     [sepolia.id]: http(import.meta.env.VITE_SEPOLIA_RPC_URL || undefined),
     [foundry.id]: http('http://127.0.0.1:8545'),

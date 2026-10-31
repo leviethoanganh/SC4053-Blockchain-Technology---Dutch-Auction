@@ -52,7 +52,7 @@ export interface AuctionView {
   position: Position | null
 }
 
-export type TxAction = 'connect' | 'bid' | 'finalize' | 'claim'
+export type TxAction = 'connect' | 'start' | 'bid' | 'finalize' | 'claim'
 
 export type TxState =
   | { status: 'idle' }
@@ -67,6 +67,8 @@ export interface AuctionActions {
   bid: (amountWei: bigint) => Promise<boolean>
   finalize: () => Promise<void>
   claim: () => Promise<void>
+  /** Owner only: starts the 20-minute timer. Only on the real contract. */
+  start?: () => Promise<void>
 }
 
 export interface DemoControls {
@@ -80,4 +82,8 @@ export interface UseAuctionResult {
   tx: TxState
   /** Only present in preview mode. */
   demo?: DemoControls
+  /** Real contract only: still loading the first read, or failed to read. */
+  status?: 'loading' | 'ready' | 'error'
+  /** A sentence explaining why the page can't show contract data, if any. */
+  problem?: string | null
 }
