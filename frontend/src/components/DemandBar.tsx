@@ -9,9 +9,9 @@ export function DemandBar({ view }: { view: AuctionView }) {
 
   let caption: string
   if (view.phase === 'cleared') {
-    caption = `${formatUnits(view.totalCommitted, 4)} ETH in bids bought all ${formatUnits(view.totalSupply, 0)} ${TOKEN.symbol}.`
+    caption = `${formatUnits(view.totalCommitted, 8)} ETH in bids bought all ${formatUnits(view.totalSupply, 0)} ${TOKEN.symbol}.`
   } else if (view.phase === 'time-up') {
-    caption = `${formatUnits(view.totalCommitted, 4)} ETH in bids. The rest of the supply was not sold.`
+    caption = `${formatUnits(view.totalCommitted, 8)} ETH in bids. The rest of the supply was not sold.`
   } else if (view.totalCommitted === 0n) {
     caption = 'No bids yet.'
   } else if (view.demandPrice < view.reservePrice) {
@@ -27,7 +27,7 @@ export function DemandBar({ view }: { view: AuctionView }) {
           {ended ? 'Bids received' : 'Bids so far'}
         </h2>
         <span className="demand__figures">
-          <strong>{formatUnits(view.totalCommitted, 4)}</strong> of {formatUnits(view.costAtCurrentPrice, 4)} ETH
+          <strong>{formatUnits(view.totalCommitted, 8)}</strong> of {formatUnits(view.costAtCurrentPrice, 4)} ETH
         </span>
       </div>
       <div

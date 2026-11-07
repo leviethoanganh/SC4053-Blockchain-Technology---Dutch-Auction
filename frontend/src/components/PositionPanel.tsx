@@ -31,7 +31,7 @@ export function PositionPanel({ view, actions, tx }: { view: AuctionView; action
           <dl className="facts">
             <div>
               <dt>ETH committed</dt>
-              <dd>{formatUnits(pos.committed, 4)} ETH</dd>
+              <dd>{formatUnits(pos.committed, 8)} ETH</dd>
             </div>
             <div>
               <dt>{pos.isEstimate ? 'Tokens, at least' : 'Tokens'}</dt>

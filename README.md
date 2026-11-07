@@ -11,18 +11,18 @@ This is our group project for SC4053 (Option 2: Dutch Auction dApp).
 | Part | Status |
 | --- | --- |
 | Rules / spec (`spec.md`) | Done, **team sign-off needed** |
-| Contracts (`contracts/`) | Done: 34 tests pass, 100% coverage, Slither checked |
-| Frontend (`frontend/`) | Done: preview mode + live contract mode with MetaMask |
+| Contracts (`contracts/`) | Done: 35 tests pass, 100% coverage, Slither checked |
+| Frontend (`frontend/`) | Done: preview mode + live contract mode with MetaMask, owner withdraw panel |
 | Local test (Anvil + MetaMask) | Done by AI in a headless browser; **each member to try once** |
 | Sepolia deployment + team demo | **To do** |
-| Reentrancy bonus demo | Done: `test/ReentrancyDemo.t.sol` (vulnerable copy drained vs ours blocked) |
+| Reentrancy bonus demo | Done: `test/ReentrancyDemo.t.sol` and `test/ReentrancyVulnerable.t.sol` (vulnerable copy drained vs ours blocked; traces in `report/evidence/`); **screenshots to do** |
 | AI Audit Report | **To do** (evidence and logs are ready) |
 
 ### Remaining work
 
 **1. Everyone: set up and try it locally (Sun 1 Nov)**
 - [ ] Install Foundry (Git Bash) and MetaMask, clone the repo, `git submodule update --init --recursive`
-- [ ] `cd contracts && forge test` shows 34 passed
+- [ ] `cd contracts && forge test` shows 35 passed
 - [ ] Run one auction on Anvil with the website ([steps](#run-the-frontend-against-a-local-contract-anvil))
 - [ ] Read `spec.md`, suggest changes, tick your name in its sign-off
 
@@ -36,7 +36,9 @@ This is our group project for SC4053 (Option 2: Dutch Auction dApp).
 
 **3. Bonus: reentrancy demo**
 - [x] `forge test --match-contract ReentrancyDemo -vv`: the same attacker drains a deliberately vulnerable copy (owed 0.150 ETH, takes 2.100 ETH) and is blocked by `DutchAuction` (paid 0.150 ETH once)
-- [ ] Screenshot the output for the report and show it in the video
+- [x] `test/ReentrancyVulnerable.t.sol`: a vulnerable copy of `claim()` (no guard, pays before clearing state) is drained; trace in `report/evidence/2026-11-07-reentrancy-vulnerable.txt`
+- [x] The same attacker against `DutchAuction` is blocked (`test/Reentrancy.t.sol`)
+- [ ] Screenshot both results for the report and show them in the video
 
 **4. AI Audit Report (drafts by Sun 8 Nov)**
 
@@ -75,11 +77,11 @@ Set in [`contracts/script/Deploy.s.sol`](contracts/script/Deploy.s.sol). In live
 | Parameter | Value |
 | --- | --- |
 | Token supply | 1,000 TLP |
-| Start price | 0.001 ETH per TLP |
-| Reserve price | 0.0001 ETH per TLP |
+| Start price | 0.00001 ETH per TLP |
+| Reserve price | 0.000001 ETH per TLP |
 | Duration | 20 minutes |
-| ETH needed to clear at start price | 1 ETH |
-| ETH needed to clear at reserve price | 0.1 ETH |
+| ETH needed to clear at start price | 0.01 ETH |
+| ETH needed to clear at reserve price | 0.001 ETH |
 
 The amounts are small on purpose, so the team can run full auctions with Sepolia test ETH.
 
@@ -238,7 +240,7 @@ After cloning the repo on another computer, use `git submodule update --init --r
 
 ```bash
 forge build
-forge test -vv                                           # 34 tests, incl. fuzz + reentrancy attack
+forge test -vv                                           # 35 tests, incl. fuzz + reentrancy attacks
 forge test --match-contract ReentrancyDemo -vv            # bonus: vulnerable copy drained vs ours blocked
 forge coverage --no-match-coverage "test|script"         # 100% lines and branches
 slither . --filter-paths "lib/|test/|script/"            # needs: pip install slither-analyzer
@@ -249,6 +251,7 @@ slither . --filter-paths "lib/|test/|script/"            # needs: pip install sl
 | `test/DutchAuction.t.sol` | Price decay, every bidding rule, all three endings (sell-out by a bid, price falls to demand, time runs out + burn), threshold refund, same price for everyone, claim/finalize once, owner-only actions, and a fuzz test (1,000 random runs) that tokens out ≤ tokens sold and ETH out ≤ ETH in |
 | `test/Reentrancy.t.sol` | A malicious bidder re-enters `claim()` from its `receive()` and is blocked; it gets exactly one refund and other bidders are unaffected |
 | `test/ReentrancyDemo.t.sol` | Bonus demo: the same attacker against a deliberately vulnerable copy (drained) and against `DutchAuction` (blocked), with readable ETH amounts in the log |
+| `test/ReentrancyVulnerable.t.sol` | The "before" picture: the same kind of attacker drains a deliberately vulnerable copy (no guard, pays before clearing state), taking 6 ETH for a 1 ETH bid and leaving an honest bidder unpaid |
 
 **Deploy to Anvil** (local), with `anvil --block-time 1` running in another window:
 
@@ -282,7 +285,7 @@ Never paste a real private key into a command or a file in this repo. Use a Meta
    VITE_AUCTION_DEPLOY_BLOCK=<deploy block>
    ```
 5. **Run the auction:** the deployer account clicks **Start auction (owner only)**. Bidding then lasts exactly 20 minutes.
-6. **Afterwards:** the owner can collect the sale ETH with `cast send <auction> "withdrawProceeds()" --account deployer --rpc-url https://ethereum-sepolia-rpc.publicnode.com`.
+6. **Afterwards:** connect the deployer wallet. An owner-only **Withdraw proceeds** panel appears under the finalize panel and sends the ETH from claims so far. (Without the UI: `cast send <auction> "withdrawProceeds()" --account deployer --rpc-url https://ethereum-sepolia-rpc.publicnode.com`.)
 
 The public RPC can be slow or rate-limited. If so, use a free Alchemy or Infura Sepolia URL in both the `--rpc-url` above and `VITE_SEPOLIA_RPC_URL`.
 
@@ -290,7 +293,7 @@ The public RPC can be slow or rate-limited. If so, use a free Alchemy or Infura 
 
 - A bidder **contract** that cannot receive ETH and is owed a refund cannot claim (the whole claim reverts, so nothing is lost). Normal wallets and MetaMask are unaffected.
 - Rounding leaves a few wei of tokens/ETH in the contract (tokens round down, cost rounds up), so it can never owe more than it holds.
-- Validators can shift `block.timestamp` by a few seconds; the price moves about 0.00000075 ETH per token per second, which is negligible.
+- Validators can shift `block.timestamp` by a few seconds; the price moves about 0.0000000075 ETH per token per second, which is negligible.
 
 ## Tech stack
 

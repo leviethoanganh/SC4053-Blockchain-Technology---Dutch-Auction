@@ -1,0 +1,70 @@
+# forge test --match-contract '^ReentrancyTest$' -vvvv  (2026-11-07T14:57Z, forge 1.9.0, solc 0.8.28)
+# AFTER: same attack against DutchAuction is blocked by nonReentrant
+No files changed, compilation skipped
+
+Ran 1 test for test/Reentrancy.t.sol:ReentrancyTest
+[PASS] test_ReentrantClaimCannotDoubleRefund() (gas: 784988)
+Traces:
+  [800188] ReentrancyTest::test_ReentrantClaimCannotDoubleRefund()
+    ├─ [213499] → new ReentrantBidder@0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f
+    │   └─ ← [Return] 736 bytes of code
+    ├─ [0] VM::prank(alice: [0x328809Bc894f92807417D2dAD6b7C998c1aFdac6])
+    │   └─ ← [Return]
+    ├─ [74926] DutchAuction::bid{value: 500000000000000000}()
+    │   ├─ emit BidPlaced(bidder: alice: [0x328809Bc894f92807417D2dAD6b7C998c1aFdac6], amount: 500000000000000000 [5e17], price: 1000000000000000 [1e15])
+    │   └─ ← [Stop]
+    ├─ [0] VM::warp(601)
+    │   └─ ← [Return]
+    ├─ [156389] ReentrantBidder::placeBid{value: 200000000000000000}()
+    │   ├─ [125586] DutchAuction::bid{value: 200000000000000000}()
+    │   │   ├─ emit BidPlaced(bidder: ReentrantBidder: [0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f], amount: 200000000000000000 [2e17], price: 550000000000000 [5.5e14])
+    │   │   └─ ← [Stop]
+    │   └─ ← [Stop]
+    ├─ [32506] DutchAuction::finalize()
+    │   ├─ emit AuctionFinalized(clearingPrice: 550000000000000 [5.5e14], sold: 1000000000000000000000 [1e21], burned: 0)
+    │   └─ ← [Stop]
+    ├─ [131257] ReentrantBidder::attack()
+    │   ├─ [107179] DutchAuction::claim()
+    │   │   ├─ emit Claimed(bidder: ReentrantBidder: [0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f], tokens: 90909090909090909090 [9.09e19], refund: 150000000000000000 [1.5e17])
+    │   │   ├─ [30003] AuctionToken::transfer(ReentrantBidder: [0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f], 90909090909090909090 [9.09e19])
+    │   │   │   ├─ emit Transfer(from: DutchAuction: [0x88F59F8826af5e695B13cA934d6c7999875A9EeA], to: ReentrantBidder: [0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f], amount: 90909090909090909090 [9.09e19])
+    │   │   │   └─ ← [Return] true
+    │   │   ├─ [23157] ReentrantBidder::receive{value: 150000000000000000}()
+    │   │   │   ├─ [434] DutchAuction::claim()
+    │   │   │   │   └─ ← [Revert] ReentrancyGuardReentrantCall()
+    │   │   │   └─ ← [Stop]
+    │   │   └─ ← [Stop]
+    │   └─ ← [Stop]
+    ├─ [2337] ReentrantBidder::reentryAttempts() [staticcall]
+    │   └─ ← [Return] 1
+    ├─ [2276] ReentrantBidder::reentrySucceeded() [staticcall]
+    │   └─ ← [Return] false
+    ├─ [0] VM::assertApproxEqAbs(150000000000000000 [1.5e17], 150000000000000000 [1.5e17], 1) [staticcall]
+    │   └─ ← [Return]
+    ├─ [0] VM::assertApproxEqAbs(150000000000000000 [1.5e17], 150000000000000000 [1.5e17], 1) [staticcall]
+    │   └─ ← [Return]
+    ├─ [0] VM::prank(alice: [0x328809Bc894f92807417D2dAD6b7C998c1aFdac6])
+    │   └─ ← [Return]
+    ├─ [78907] DutchAuction::claim()
+    │   ├─ emit Claimed(bidder: alice: [0x328809Bc894f92807417D2dAD6b7C998c1aFdac6], tokens: 909090909090909090909 [9.09e20], refund: 0)
+    │   ├─ [30003] AuctionToken::transfer(alice: [0x328809Bc894f92807417D2dAD6b7C998c1aFdac6], 909090909090909090909 [9.09e20])
+    │   │   ├─ emit Transfer(from: DutchAuction: [0x88F59F8826af5e695B13cA934d6c7999875A9EeA], to: alice: [0x328809Bc894f92807417D2dAD6b7C998c1aFdac6], amount: 909090909090909090909 [9.09e20])
+    │   │   └─ ← [Return] true
+    │   └─ ← [Stop]
+    ├─ [325] DutchAuction::token() [staticcall]
+    │   └─ ← [Return] AuctionToken: [0xf801f3A6F4e09F82D6008505C67a0A5b39842406]
+    ├─ [2559] AuctionToken::balanceOf(alice: [0x328809Bc894f92807417D2dAD6b7C998c1aFdac6]) [staticcall]
+    │   └─ ← [Return] 909090909090909090909 [9.09e20]
+    ├─ [325] DutchAuction::token() [staticcall]
+    │   └─ ← [Return] AuctionToken: [0xf801f3A6F4e09F82D6008505C67a0A5b39842406]
+    ├─ [2559] AuctionToken::balanceOf(ReentrantBidder: [0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f]) [staticcall]
+    │   └─ ← [Return] 90909090909090909090 [9.09e19]
+    ├─ [325] DutchAuction::token() [staticcall]
+    │   └─ ← [Return] AuctionToken: [0xf801f3A6F4e09F82D6008505C67a0A5b39842406]
+    ├─ [2559] AuctionToken::balanceOf(alice: [0x328809Bc894f92807417D2dAD6b7C998c1aFdac6]) [staticcall]
+    │   └─ ← [Return] 909090909090909090909 [9.09e20]
+    └─ ← [Stop]
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 936.96µs (198.75µs CPU time)
+
+Ran 1 test suite in 4.40ms (936.96µs CPU time): 1 tests passed, 0 failed, 0 skipped (1 total tests)

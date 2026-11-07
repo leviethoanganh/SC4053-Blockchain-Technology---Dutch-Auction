@@ -4,6 +4,7 @@ import { DemandBar } from './components/DemandBar'
 import { DemoControls } from './components/DemoControls'
 import { FinalizePanel } from './components/FinalizePanel'
 import { Header } from './components/Header'
+import { OwnerPanel } from './components/OwnerPanel'
 import { HowItWorks } from './components/HowItWorks'
 import { PositionPanel } from './components/PositionPanel'
 import { PriceClock } from './components/PriceClock'
@@ -38,6 +39,7 @@ export default function App() {
             ) : (
               <FinalizePanel view={view} actions={actions} tx={tx} />
             )}
+            <OwnerPanel view={view} actions={actions} tx={tx} />
           </div>
         </section>
 

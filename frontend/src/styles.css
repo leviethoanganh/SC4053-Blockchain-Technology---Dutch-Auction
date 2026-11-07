@@ -369,7 +369,7 @@ input {
 
 .clock__price {
   font-family: var(--font-display);
-  font-size: clamp(2.1rem, 7.4vw, 3.6rem);
+  font-size: clamp(1.4rem, 5vw, 2.4rem);
   font-weight: 650;
   font-variation-settings: 'opsz' 96;
   letter-spacing: -0.035em;

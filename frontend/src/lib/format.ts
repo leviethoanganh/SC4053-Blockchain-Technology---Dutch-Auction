@@ -26,7 +26,7 @@ export function formatUnits(value: bigint, maxDecimals = 6, minDecimals = 0): st
 
 /** Price in ETH per token, always with enough digits to see it move. */
 export function formatPrice(wei: bigint): string {
-  return formatUnits(wei, 6, 6)
+  return formatUnits(wei, 10, 10)
 }
 
 export function shortAddress(address: string): string {
