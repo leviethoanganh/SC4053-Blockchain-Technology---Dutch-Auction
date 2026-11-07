@@ -305,6 +305,9 @@ function useAuctionLogs(client: ReturnType<typeof usePublicClient>, head: bigint
       if (!client) return Promise.resolve()
       // One sync at a time; a running sync picks up the raised target before it finishes.
       if (busyRef.current) return busyRef.current
+      // Nothing new: return now. A run with nothing to fetch would finish synchronously,
+      // clearing busyRef before it is set below, and block every later sync.
+      if (nextRef.current > targetRef.current) return Promise.resolve()
       const run = async () => {
         try {
           while (nextRef.current <= targetRef.current) {
