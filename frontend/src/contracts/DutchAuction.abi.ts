@@ -578,6 +578,11 @@ export const dutchAuctionAbi = [
   },
   {
     "type": "error",
+    "name": "OwnerCannotBid",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "ReentrancyGuardReentrantCall",
     "inputs": []
   },

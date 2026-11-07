@@ -71,20 +71,18 @@ In case A only part of the last bid is needed. That bidder's excess is
 For each bidder with total commitment `c`:
 
 ```
-usable = c − (excess if this is the threshold bidder, else 0)
-tokens = floor(usable × 1e18 / clearingPrice)
-cost   = ceil(tokens × clearingPrice / 1e18)
-refund = c − cost
+refund = excess if this is the threshold bidder, else 0
+tokens = floor((c − refund) × 1e18 / clearingPrice)
 ```
 
-**Rounding rule:** tokens round **down** and cost rounds **up**, so the contract can never promise more tokens or ETH than it holds. Dust from rounding stays in the contract.
+**Rounding rule:** tokens round **down**, so the contract can never hand out more tokens than it sold. A bidder loses less than one base unit of token (under 1 wei of value while the price is below 1 ETH per token). Unclaimable token dust stays in the contract.
 
 ### 3.6 Unsold tokens (R3)
 - Case A or B: the whole supply is sold, so nothing is burned.
 - Case C: `sold = floor(C × 1e18 / Pr)`, and `S − sold` is **burned** in `finalize()`, reducing `totalSupply()`.
 
 ### 3.7 Proceeds
-Each claim adds that bidder's `cost` to `proceeds`. The owner withdraws `proceeds` with `withdrawProceeds()`. Bidders' refunds are never available to the owner.
+`finalize()` sets `proceeds = C − excess`: all committed ETH except the threshold refund. The owner withdraws it with `withdrawProceeds()` at once, without waiting for anyone to claim, so a bidder who never claims cannot lock the owner's ETH. The threshold excess is never in `proceeds`, so bidders' refunds are never available to the owner.
 
 ## 4. Brief's tricky points: our answers
 
@@ -123,7 +121,7 @@ event ProceedsWithdrawn(address indexed to, uint256 amount);
 
 | ID | Requirement |
 | --- | --- |
-| S1 | Bids are rejected before `start()`, at or after `endTime`, after sell-out, and with 0 ETH. |
+| S1 | Bids are rejected before `start()`, at or after `endTime`, after sell-out, with 0 ETH, and from the owner (so the owner cannot buy their own supply to push the price up). |
 | S2 | `start()` can be called only by the owner, and only once. `finalize()` runs once. Each bidder claims once. |
 | S3 | `claim()` and `withdrawProceeds()` cannot be re-entered (R7). |
 | S4 | Tokens handed out never exceed the supply. ETH paid out never exceeds ETH held. |

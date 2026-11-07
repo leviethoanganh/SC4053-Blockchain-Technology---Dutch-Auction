@@ -11,8 +11,8 @@ import {AuctionToken} from "./AuctionToken.sol";
 /// @title DutchAuction
 /// @notice A 20-minute Dutch auction for a fixed supply of AuctionToken (spec.md).
 ///         The price falls linearly from `startPrice` to `reservePrice`. Bidders commit ETH;
-///         everyone pays the same clearing price; unsold tokens are burned; tokens and ETH
-///         refunds are pulled by each bidder with `claim()`.
+///         everyone pays the same clearing price; unsold tokens are burned; the owner is
+///         credited the sale ETH at `finalize()`; tokens and refunds are pulled with `claim()`.
 /// @dev Prices are in wei per WHOLE token (1e18 base units). Token amounts are base units.
 contract DutchAuction is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -58,7 +58,7 @@ contract DutchAuction is Ownable, ReentrancyGuard {
     address public thresholdBidder;
     /// @notice The part of the threshold bid that was not needed, refunded on claim.
     uint256 public thresholdExcess;
-    /// @notice Sale proceeds from claims so far that the owner has not withdrawn yet.
+    /// @notice Sale ETH the owner has not withdrawn yet. Credited in full by `finalize()`.
     uint256 public proceeds;
 
     // ---------------------------------------------------------------------
@@ -77,6 +77,7 @@ contract DutchAuction is Ownable, ReentrancyGuard {
     error AuctionEnded();
     error SoldOut();
     error ZeroBid();
+    error OwnerCannotBid();
     error AuctionStillRunning();
     error AlreadyFinalized();
     error NotFinalized();
@@ -152,8 +153,11 @@ contract DutchAuction is Ownable, ReentrancyGuard {
     /// @dev If this bid makes the committed ETH cover the whole supply at the current price,
     ///      the auction clears now at that price (case A) and the unneeded part of this
     ///      bid is recorded for refund (spec §3.4).
+    ///      The owner cannot bid, so they cannot buy their own supply to force a high price
+    ///      (spec S1). A second wallet can still do it; see the README's known limitations.
     function bid() external payable {
         if (startTime == 0) revert NotStarted();
+        if (msg.sender == owner()) revert OwnerCannotBid();
         if (block.timestamp >= endTime) revert AuctionEnded();
         if (msg.value == 0) revert ZeroBid();
         if (isSoldOut()) revert SoldOut();
@@ -176,8 +180,10 @@ contract DutchAuction is Ownable, ReentrancyGuard {
     // Settlement
     // ---------------------------------------------------------------------
 
-    /// @notice Fix the clearing price and burn unsold tokens. Anyone can call it, once,
-    ///         after the auction has sold out or 20 minutes have passed.
+    /// @notice Fix the clearing price, burn unsold tokens and credit the sale ETH to the owner.
+    ///         Anyone can call it, once, after the auction has sold out or 20 minutes have passed.
+    /// @dev The owner is paid here, not per claim, so bidders who never claim cannot lock the
+    ///      owner's ETH (spec §3.7). Only the threshold excess is held back for refund.
     function finalize() external {
         if (startTime == 0) revert NotStarted();
         if (finalized) revert AlreadyFinalized();
@@ -199,6 +205,7 @@ contract DutchAuction is Ownable, ReentrancyGuard {
         }
 
         finalized = true;
+        proceeds = totalCommitted - thresholdExcess;
         uint256 burned = totalSupply - sold;
         emit AuctionFinalized(clearingPrice, sold, burned);
         if (burned != 0) token.burn(burned);
@@ -206,7 +213,8 @@ contract DutchAuction is Ownable, ReentrancyGuard {
 
     /// @notice Receive your tokens and any ETH refund. Each bidder once, after `finalize()`.
     /// @dev Pull payment with checks-effects-interactions and a reentrancy guard (spec S3).
-    ///      Tokens round down and cost rounds up, so the contract never owes more than it holds.
+    ///      Tokens round down, so the contract never hands out more than it sold. The refund is
+    ///      only the threshold excess: everything else was already credited to the owner.
     function claim() external nonReentrant {
         if (!finalized) revert NotFinalized();
         uint256 committed = commitments[msg.sender];
@@ -214,11 +222,8 @@ contract DutchAuction is Ownable, ReentrancyGuard {
 
         // Effects
         commitments[msg.sender] = 0;
-        uint256 usable = msg.sender == thresholdBidder ? committed - thresholdExcess : committed;
-        uint256 tokens = Math.mulDiv(usable, ONE_TOKEN, clearingPrice);
-        uint256 cost = Math.mulDiv(tokens, clearingPrice, ONE_TOKEN, Math.Rounding.Ceil);
-        uint256 refund = committed - cost;
-        proceeds += cost;
+        uint256 refund = msg.sender == thresholdBidder ? thresholdExcess : 0;
+        uint256 tokens = Math.mulDiv(committed - refund, ONE_TOKEN, clearingPrice);
         emit Claimed(msg.sender, tokens, refund);
 
         // Interactions
@@ -229,8 +234,8 @@ contract DutchAuction is Ownable, ReentrancyGuard {
         }
     }
 
-    /// @notice Owner withdraws the sale proceeds collected from claims so far.
-    /// @dev Only claimed costs are withdrawable, so bidders' refunds can never be taken (spec §3.7).
+    /// @notice Owner withdraws the sale ETH credited by `finalize()`.
+    /// @dev The threshold excess is never part of `proceeds`, so refunds can never be taken (spec §3.7).
     function withdrawProceeds() external onlyOwner nonReentrant {
         uint256 amount = proceeds;
         if (amount == 0) revert NothingToWithdraw();

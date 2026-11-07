@@ -11,7 +11,7 @@ This is our group project for SC4053 (Option 2: Dutch Auction dApp).
 | Part | Status |
 | --- | --- |
 | Rules / spec (`spec.md`) | Done, **team sign-off needed** |
-| Contracts (`contracts/`) | Done: 35 tests pass, 100% coverage, Slither checked |
+| Contracts (`contracts/`) | Done: 37 tests pass, 100% coverage, Slither checked |
 | Frontend (`frontend/`) | Done: preview mode + live contract mode with MetaMask, owner withdraw panel |
 | Local test (Anvil + MetaMask) | Done by AI in a headless browser; **each member to try once** |
 | Sepolia deployment + team demo | **To do** |
@@ -22,7 +22,7 @@ This is our group project for SC4053 (Option 2: Dutch Auction dApp).
 
 **1. Everyone: set up and try it locally (Sun 1 Nov)**
 - [ ] Install Foundry (Git Bash) and MetaMask, clone the repo, `git submodule update --init --recursive`
-- [ ] `cd contracts && forge test` shows 35 passed
+- [ ] `cd contracts && forge test` shows 37 passed
 - [ ] Run one auction on Anvil with the website ([steps](#run-the-frontend-against-a-local-contract-anvil))
 - [ ] Read `spec.md`, suggest changes, tick your name in its sign-off
 
@@ -113,7 +113,7 @@ function bid() external payable;              // while live and not sold out
 function currentPrice() external view returns (uint256);
 function finalize() external;                 // anyone, once, after sell-out or 20 min; burns unsold
 function claim() external;                    // each bidder once: tokens + ETH refund (pull)
-function withdrawProceeds() external;         // owner: sale proceeds from claims so far
+function withdrawProceeds() external;         // owner: whole sale, credited at finalize
 // views: token, startPrice, reservePrice, totalSupply, DURATION, startTime, endTime,
 //        clearingPrice, totalCommitted, finalized, soldOut, isSoldOut(), hasEnded(),
 //        commitments(address), thresholdBidder, thresholdExcess, proceeds, demandPrice()
@@ -122,7 +122,7 @@ event BidPlaced(address indexed bidder, uint256 amount, uint256 price);
 event AuctionFinalized(uint256 clearingPrice, uint256 sold, uint256 burned);
 event Claimed(address indexed bidder, uint256 tokens, uint256 refund);
 event ProceedsWithdrawn(address indexed to, uint256 amount);
-// errors: NotStarted, AlreadyStarted, AuctionEnded, SoldOut, ZeroBid, AuctionStillRunning,
+// errors: NotStarted, AlreadyStarted, AuctionEnded, SoldOut, ZeroBid, OwnerCannotBid, AuctionStillRunning,
 //         AlreadyFinalized, NotFinalized, NothingToClaim, NothingToWithdraw, EthTransferFailed
 ```
 
@@ -130,8 +130,10 @@ event ProceedsWithdrawn(address indexed to, uint256 amount);
 
 - **Reentrancy:** `ReentrancyGuard` plus checks-effects-interactions on `claim()` and `withdrawProceeds()`. `test/Reentrancy.t.sol` attacks `claim()` with a malicious contract and shows the attack is blocked.
 - **Timing:** bids are rejected before `start()`, after 20 minutes, and after the auction clears.
+- **No owner bids:** the owner's wallet cannot bid, so it cannot buy its own supply to push the price up.
+- **Owner paid at finalize:** `finalize()` credits the whole sale to `proceeds`, so bidders who never claim cannot lock the owner's ETH. Only the threshold refund stays behind for its bidder.
 - **One-time actions:** `finalize()` runs once, and each bidder claims once.
-- **Rounding:** integer division never leaves more tokens or ETH promised than the contract holds.
+- **Rounding:** tokens round down, so the contract never promises more tokens than it holds.
 
 ## Repository structure
 
@@ -240,7 +242,7 @@ After cloning the repo on another computer, use `git submodule update --init --r
 
 ```bash
 forge build
-forge test -vv                                           # 35 tests, incl. fuzz + reentrancy attacks
+forge test -vv                                           # 37 tests, incl. fuzz + reentrancy attacks
 forge test --match-contract ReentrancyDemo -vv            # bonus: vulnerable copy drained vs ours blocked
 forge coverage --no-match-coverage "test|script"         # 100% lines and branches
 slither . --filter-paths "lib/|test/|script/"            # needs: pip install slither-analyzer
@@ -285,14 +287,16 @@ Never paste a real private key into a command or a file in this repo. Use a Meta
    VITE_AUCTION_DEPLOY_BLOCK=<deploy block>
    ```
 5. **Run the auction:** the deployer account clicks **Start auction (owner only)**. Bidding then lasts exactly 20 minutes.
-6. **Afterwards:** connect the deployer wallet. An owner-only **Withdraw proceeds** panel appears under the finalize panel and sends the ETH from claims so far. (Without the UI: `cast send <auction> "withdrawProceeds()" --account deployer --rpc-url https://ethereum-sepolia-rpc.publicnode.com`.)
+6. **Afterwards:** connect the deployer wallet. An owner-only **Withdraw proceeds** panel appears under the finalize panel and sends the whole sale ETH, even if some bidders have not claimed. (Without the UI: `cast send <auction> "withdrawProceeds()" --account deployer --rpc-url https://ethereum-sepolia-rpc.publicnode.com`.)
 
 The public RPC can be slow or rate-limited. If so, use a free Alchemy or Infura Sepolia URL in both the `--rpc-url` above and `VITE_SEPOLIA_RPC_URL`.
 
 #### Known limitations
 
 - A bidder **contract** that cannot receive ETH and is owed a refund cannot claim (the whole claim reverts, so nothing is lost). Normal wallets and MetaMask are unaffected.
-- Rounding leaves a few wei of tokens/ETH in the contract (tokens round down, cost rounds up), so it can never owe more than it holds.
+- Rounding leaves a few base units of tokens in the contract (tokens round down), so it can never hand out more than it sold.
+- The owner's wallet cannot bid (`OwnerCannotBid`), but the contract cannot tell that a second wallet belongs to the owner. An owner who bids from another wallet can still sell out early and raise the price everyone pays.
+- Tokens of a bidder who never claims stay in the contract. The owner is already paid for them, so this costs only that bidder.
 - Validators can shift `block.timestamp` by a few seconds; the price moves about 0.0000000075 ETH per token per second, which is negligible.
 
 ## Tech stack

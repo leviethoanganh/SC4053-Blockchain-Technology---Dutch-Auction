@@ -23,8 +23,8 @@ export function OwnerPanel({ view, actions, tx }: { view: AuctionView; actions: 
         </div>
       </dl>
       <p className="finalize__text">
-        Proceeds build up as bidders claim. Refunds stay in the contract for bidders, so only claimed sales can be
-        withdrawn.
+        The whole sale is credited when the auction is finalized, so you do not have to wait for bidders to claim.
+        The threshold bidder's refund stays in the contract for them.
       </p>
       <button
         className="button button--primary button--wide"

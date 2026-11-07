@@ -7,6 +7,7 @@ const CONTRACT_ERRORS: Record<string, string> = {
   AuctionEnded: 'Bidding has closed: the 20 minutes are over.',
   SoldOut: 'Bidding has closed: the supply is sold out.',
   ZeroBid: 'Enter an amount above 0 ETH.',
+  OwnerCannotBid: 'The contract owner cannot bid in their own auction. Switch to another wallet.',
   AuctionStillRunning: 'The auction is still running. It can be finalized once it sells out or time is up.',
   AlreadyFinalized: 'The auction has already been finalized.',
   NotFinalized: 'Claims open once the auction is finalized.',

@@ -148,32 +148,24 @@ export interface Allocation {
 
 /**
  * What one address receives once the clearing price is known.
- * Cost is rounded UP, so any rounding dust stays in the contract instead of
- * the contract owing more ETH than it holds.
+ * Tokens round down, and only the threshold excess is refunded: the rest was
+ * credited to the owner at finalize.
  */
 export function allocate(outcome: Outcome, address: string): Allocation {
   const mine = outcome.accepted.filter((b) => b.bidder.toLowerCase() === address.toLowerCase())
   const committed = mine.reduce((sum, b) => sum + b.amount, 0n)
   if (outcome.clearingPrice === null) return { committed, tokens: 0n, refund: 0n }
-  const usable = mine.reduce(
-    (sum, b) => sum + b.amount - (b.id === outcome.thresholdBidId ? outcome.thresholdExcess : 0n),
-    0n,
-  )
-  const tokens = tokensFor(usable, outcome.clearingPrice)
-  const cost = ceilDiv(tokens * outcome.clearingPrice, WAD)
-  return { committed, tokens, refund: committed - cost }
+  const refund = mine.some((b) => b.id === outcome.thresholdBidId) ? outcome.thresholdExcess : 0n
+  return { committed, tokens: tokensFor(committed - refund, outcome.clearingPrice), refund }
 }
 
 /**
  * One bidder's settlement, exactly as DutchAuction.claim() computes it:
- * tokens round down, cost rounds up, the rest is refunded.
- * `excess` is the unused part of the threshold bid (0 for everyone else).
+ * the refund is `excess`, the unused part of the threshold bid (0 for everyone else),
+ * and the rest buys tokens, rounded down.
  */
 export function settle(committed: bigint, excess: bigint, clearingPrice: bigint): { tokens: bigint; refund: bigint } {
-  const usable = committed - excess
-  const tokens = tokensFor(usable, clearingPrice)
-  const cost = ceilDiv(tokens * clearingPrice, WAD)
-  return { tokens, refund: committed - cost }
+  return { tokens: tokensFor(committed - excess, clearingPrice), refund: excess }
 }
 
 /** Tokens sold in total once the auction has ended. */

@@ -175,6 +175,13 @@ contract DutchAuctionTest is Test {
         assertFalse(auction.isSoldOut());
     }
 
+    function test_RevertWhen_OwnerBids() public {
+        _start();
+        vm.deal(owner, 1 ether);
+        vm.expectRevert(DutchAuction.OwnerCannotBid.selector);
+        _bid(owner, 1 ether);
+    }
+
     function test_RevertWhen_PlainEthSent() public {
         (bool ok,) = address(auction).call{value: 1 ether}("");
         assertFalse(ok);
@@ -206,7 +213,7 @@ contract DutchAuctionTest is Test {
         assertApproxEqAbs(bTokens, 454.545454545454545454e18, 1);
         assertLe(aTokens + bTokens, SUPPLY);
         assertApproxEqAbs(bRefund, 0.15 ether, 1);
-        assertLe(aRefund, 1); // only rounding dust
+        assertEq(aRefund, 0); // only the threshold bidder is refunded
     }
 
     function test_EveryonePaysTheSameClearingPrice() public {
@@ -348,7 +355,6 @@ contract DutchAuctionTest is Test {
         _bid(alice, 0.03 ether);
         vm.warp(auction.endTime());
         auction.finalize();
-        _claim(alice);
         vm.expectRevert(DutchAuction.EthTransferFailed.selector);
         nb.withdrawFrom(auction);
         assertEq(auction.proceeds(), 0.03 ether); // still there to withdraw later
@@ -356,28 +362,44 @@ contract DutchAuctionTest is Test {
 
     // ===== Proceeds (§3.7) =====
 
-    function test_OwnerWithdrawsOnlyClaimedProceeds() public {
+    function test_OwnerWithdrawsFullProceedsBeforeAnyClaim() public {
         _start();
         _bid(alice, 0.3 ether);
         vm.warp(block.timestamp + 10 minutes);
-        _bid(bob, 0.4 ether);
+        _bid(bob, 0.4 ether); // clears at 0.55 ETH, bob's excess 0.15
         auction.finalize();
+        assertEq(auction.proceeds(), 0.55 ether);
 
-        _claim(alice);
+        // Nobody has claimed, yet the owner gets the whole sale; only bob's refund stays behind.
         uint256 ownerBefore = owner.balance;
         vm.prank(owner);
         auction.withdrawProceeds();
-        uint256 first = owner.balance - ownerBefore;
-        assertApproxEqAbs(first, 0.3 ether, 1); // alice's cost only
+        assertEq(owner.balance - ownerBefore, 0.55 ether);
+        assertEq(address(auction).balance, 0.15 ether);
 
-        // Bob can still claim his tokens and full refund after the owner withdrew.
-        (, uint256 bRefund) = _claim(bob);
-        assertApproxEqAbs(bRefund, 0.15 ether, 1);
+        // Bidders can still claim everything after the owner withdrew.
+        (uint256 aTokens, uint256 aRefund) = _claim(alice);
+        (uint256 bTokens, uint256 bRefund) = _claim(bob);
+        assertEq(aRefund, 0);
+        assertEq(bRefund, 0.15 ether);
+        assertLe(aTokens + bTokens, SUPPLY);
+        assertEq(address(auction).balance, 0);
+    }
 
+    function test_UnclaimedBidderDoesNotLockProceeds() public {
+        _start();
+        _bid(alice, 0.03 ether);
+        _bid(bob, 0.02 ether);
+        vm.warp(auction.endTime());
+        auction.finalize();
+
+        _claim(alice); // bob never claims
+        uint256 ownerBefore = owner.balance;
         vm.prank(owner);
         auction.withdrawProceeds();
-        assertApproxEqAbs(owner.balance - ownerBefore, 0.55 ether, 2);
-        assertLe(address(auction).balance, 2); // only rounding dust remains
+        assertEq(owner.balance - ownerBefore, 0.05 ether); // bob's payment included
+        assertEq(address(auction).balance, 0);
+        assertEq(token.balanceOf(address(auction)), 200e18); // bob's tokens wait for him
     }
 
     function test_RevertWhen_NonOwnerWithdraws() public {
@@ -395,8 +417,8 @@ contract DutchAuctionTest is Test {
     // ===== Fuzz: accounting can never break (S4) =====
 
     /// @notice Random bids at random times. Whatever happens, tokens handed out never exceed
-    ///         what was sold, every bidder gets their ETH back as tokens + refund, and the
-    ///         contract always holds enough ETH.
+    ///         what was sold, the owner can be paid before any claim, and the contract
+    ///         still holds every refund.
     function testFuzz_AccountingNeverBreaks(uint96[6] memory amounts, uint16[6] memory gaps) public {
         address[6] memory bidders =
             [alice, bob, carol, makeAddr("dave"), makeAddr("erin"), makeAddr("frank")];
@@ -418,6 +440,14 @@ contract DutchAuctionTest is Test {
         auction.finalize();
         uint256 sold = token.totalSupply(); // finalize burned the unsold part
 
+        // The owner is paid in full before anyone claims; every claim must still succeed.
+        uint256 ownerOut = auction.proceeds();
+        assertEq(ownerOut, auction.totalCommitted() - auction.thresholdExcess());
+        if (ownerOut != 0) {
+            vm.prank(owner);
+            auction.withdrawProceeds();
+        }
+
         uint256 tokensOut;
         uint256 ethOut;
         for (uint256 i = 0; i < 6; i++) {
@@ -428,13 +458,7 @@ contract DutchAuctionTest is Test {
             assertLe(rf, placed[i]); // never refunded more than committed
         }
         assertLe(tokensOut, sold);
-        assertEq(address(auction).balance, auction.totalCommitted() - ethOut);
-        assertEq(auction.proceeds(), auction.totalCommitted() - ethOut);
-
-        if (auction.proceeds() != 0) {
-            vm.prank(owner);
-            auction.withdrawProceeds();
-        }
+        assertEq(ownerOut + ethOut, auction.totalCommitted());
         assertEq(address(auction).balance, 0);
     }
 }
