@@ -6,23 +6,23 @@ This is our group project for SC4053 (Option 2: Dutch Auction dApp).
 
 ## Project status
 
-Deadline assumed **Tue 10 Nov 2026**. Tick items as they are done.
+**Deadline: Sun 8 Nov 2026, 11:59 pm.** Submit `GroupName.zip` (this codebase) and `GroupName.mp4` (demo video, 10 minutes or less) on NTULearn.
 
 | Part | Status |
 | --- | --- |
 | Rules / spec (`spec.md`) | Done, **team sign-off needed** |
-| Contracts (`contracts/`) | Done: 32 tests pass, 100% coverage, Slither checked |
+| Contracts (`contracts/`) | Done: 34 tests pass, 100% coverage, Slither checked |
 | Frontend (`frontend/`) | Done: preview mode + live contract mode with MetaMask |
 | Local test (Anvil + MetaMask) | Done by AI in a headless browser; **each member to try once** |
 | Sepolia deployment + team demo | **To do** |
-| Reentrancy bonus demo | Test done; **side-by-side vulnerable demo to do** |
+| Reentrancy bonus demo | Done: `test/ReentrancyDemo.t.sol` (vulnerable copy drained vs ours blocked) |
 | AI Audit Report | **To do** (evidence and logs are ready) |
 
 ### Remaining work
 
 **1. Everyone: set up and try it locally (Sun 1 Nov)**
 - [ ] Install Foundry (Git Bash) and MetaMask, clone the repo, `git submodule update --init --recursive`
-- [ ] `cd contracts && forge test` shows 32 passed
+- [ ] `cd contracts && forge test` shows 34 passed
 - [ ] Run one auction on Anvil with the website ([steps](#run-the-frontend-against-a-local-contract-anvil))
 - [ ] Read `spec.md`, suggest changes, tick your name in its sign-off
 
@@ -34,10 +34,9 @@ Deadline assumed **Tue 10 Nov 2026**. Tick items as they are done.
 - [ ] Deploy a second auction and let time run out to show burning
 - [ ] Save transaction hashes and screenshots in `report/evidence/`
 
-**3. Bonus: reentrancy demo (member C, by Sat 7 Nov)**
-- [ ] A deliberately vulnerable copy of `claim()` (no guard, pays before clearing state) and a test or script showing the attacker drains it
-- [ ] The same attacker against `DutchAuction` is blocked (already in `test/Reentrancy.t.sol`)
-- [ ] Screenshot both results for the report
+**3. Bonus: reentrancy demo**
+- [x] `forge test --match-contract ReentrancyDemo -vv`: the same attacker drains a deliberately vulnerable copy (owed 0.150 ETH, takes 2.100 ETH) and is blocked by `DutchAuction` (paid 0.150 ETH once)
+- [ ] Screenshot the output for the report and show it in the video
 
 **4. AI Audit Report (drafts by Sun 8 Nov)**
 
@@ -239,7 +238,8 @@ After cloning the repo on another computer, use `git submodule update --init --r
 
 ```bash
 forge build
-forge test -vv                                           # 32 tests, incl. fuzz + reentrancy attack
+forge test -vv                                           # 34 tests, incl. fuzz + reentrancy attack
+forge test --match-contract ReentrancyDemo -vv            # bonus: vulnerable copy drained vs ours blocked
 forge coverage --no-match-coverage "test|script"         # 100% lines and branches
 slither . --filter-paths "lib/|test/|script/"            # needs: pip install slither-analyzer
 ```
@@ -248,6 +248,7 @@ slither . --filter-paths "lib/|test/|script/"            # needs: pip install sl
 | --- | --- |
 | `test/DutchAuction.t.sol` | Price decay, every bidding rule, all three endings (sell-out by a bid, price falls to demand, time runs out + burn), threshold refund, same price for everyone, claim/finalize once, owner-only actions, and a fuzz test (1,000 random runs) that tokens out ≤ tokens sold and ETH out ≤ ETH in |
 | `test/Reentrancy.t.sol` | A malicious bidder re-enters `claim()` from its `receive()` and is blocked; it gets exactly one refund and other bidders are unaffected |
+| `test/ReentrancyDemo.t.sol` | Bonus demo: the same attacker against a deliberately vulnerable copy (drained) and against `DutchAuction` (blocked), with readable ETH amounts in the log |
 
 **Deploy to Anvil** (local), with `anvil --block-time 1` running in another window:
 
