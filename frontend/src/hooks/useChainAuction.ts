@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { zeroAddress } from 'viem'
+import { zeroAddress, type ContractEventName, type GetContractEventsReturnType } from 'viem'
 import { useBlock, usePublicClient, useReadContracts, useWriteContract } from 'wagmi'
 import { AUCTION_PARAMS, NETWORK_NAME, TARGET_CHAIN } from '../config'
-import { AUCTION_DEPLOY_BLOCK, auction } from '../contracts/auction'
+import { AUCTION_DEPLOY_BLOCK, auction, auctionAbi } from '../contracts/auction'
 import {
   costOfSupply,
   demandPrice,
@@ -78,46 +77,18 @@ export function useChainAuction(): UseAuctionResult {
     if (block?.number !== undefined) void refetchReads()
   }, [block?.number, refetchReads])
 
-  const blockKey = block?.number?.toString() ?? 'none'
-
-  const bidLogs = useQuery({
-    queryKey: ['auction-bids', auction.address, chainId, blockKey],
-    enabled: Boolean(client && block),
-    placeholderData: (prev) => prev,
-    queryFn: () =>
-      client!.getContractEvents({ ...auction, eventName: 'BidPlaced', fromBlock: AUCTION_DEPLOY_BLOCK, toBlock: block!.number }),
-  })
-
-  const myClaims = useQuery({
-    queryKey: ['auction-claims', auction.address, chainId, me, blockKey],
-    enabled: Boolean(client && block && me),
-    placeholderData: (prev) => prev,
-    queryFn: () =>
-      client!.getContractEvents({
-        ...auction,
-        eventName: 'Claimed',
-        args: { bidder: me },
-        fromBlock: AUCTION_DEPLOY_BLOCK,
-        toBlock: block!.number,
-      }),
-  })
-
-  const isFinalized = reads.data?.[3] ?? false
-  const finalLogs = useQuery({
-    queryKey: ['auction-final', auction.address, chainId, isFinalized],
-    enabled: Boolean(client && isFinalized),
-    queryFn: () => client!.getContractEvents({ ...auction, eventName: 'AuctionFinalized', fromBlock: AUCTION_DEPLOY_BLOCK }),
-  })
+  // ---- Event logs ---------------------------------------------------------------
+  const { logs: eventLogs, error: logsError, sync: syncLogs } = useAuctionLogs(client, block?.number)
+  const bidLogs = useMemo(() => eventLogs.filter(isEvent('BidPlaced')), [eventLogs])
+  const myClaims = useMemo(
+    () => (me ? eventLogs.filter(isEvent('Claimed')).filter((l) => l.args.bidder!.toLowerCase() === me.toLowerCase()) : []),
+    [eventLogs, me],
+  )
+  const finalLogs = useMemo(() => eventLogs.filter(isEvent('AuctionFinalized')), [eventLogs])
+  const withdrawLogs = useMemo(() => eventLogs.filter(isEvent('ProceedsWithdrawn')), [eventLogs])
 
   const ownerAddress = reads.data?.[11]
   const isOwner = me !== undefined && ownerAddress !== undefined && me.toLowerCase() === ownerAddress.toLowerCase()
-  const withdrawLogs = useQuery({
-    queryKey: ['auction-withdrawals', auction.address, chainId, blockKey],
-    enabled: Boolean(client && block && isOwner),
-    placeholderData: (prev) => prev,
-    queryFn: () =>
-      client!.getContractEvents({ ...auction, eventName: 'ProceedsWithdrawn', fromBlock: AUCTION_DEPLOY_BLOCK, toBlock: block!.number }),
-  })
 
   // ---- Build the view -----------------------------------------------------------
   const view: AuctionView = useMemo(() => {
@@ -157,7 +128,7 @@ export function useChainAuction(): UseAuctionResult {
 
     // Bid list. The contract emits the price at bid time, and the price falls linearly,
     // so the second of each bid can be read back from its price.
-    const logs = bidLogs.data ?? []
+    const logs = bidLogs
     const isThresholdBidder = (a: string) => thresholdBidder !== zeroAddress && a.toLowerCase() === thresholdBidder.toLowerCase()
     let lastThresholdIndex = -1
     logs.forEach((l, i) => {
@@ -179,7 +150,7 @@ export function useChainAuction(): UseAuctionResult {
     let position: AuctionView['position'] = null
     if (me) {
       const committed = bids.filter((b) => b.isMine).reduce((sum, b) => sum + b.amount, 0n)
-      const claimLog = myClaims.data?.at(-1)?.args
+      const claimLog = myClaims.at(-1)?.args
       if (claimLog) {
         position = { committed, tokens: claimLog.tokens!, refund: claimLog.refund!, isEstimate: false, claimed: true }
       } else if (ended && clearingPrice !== null) {
@@ -190,9 +161,9 @@ export function useChainAuction(): UseAuctionResult {
       }
     }
 
-    const finalEvent = finalLogs.data?.at(-1)?.args
+    const finalEvent = finalLogs.at(-1)?.args
     const owner = isOwner
-      ? { proceeds: d?.[12] ?? 0n, withdrawn: (withdrawLogs.data ?? []).reduce((sum, l) => sum + l.args.amount!, 0n) }
+      ? { proceeds: d?.[12] ?? 0n, withdrawn: withdrawLogs.reduce((sum, l) => sum + l.args.amount!, 0n) }
       : null
 
     return {
@@ -217,12 +188,12 @@ export function useChainAuction(): UseAuctionResult {
       position,
       owner,
     }
-  }, [reads.data, chainNow, bidLogs.data, myClaims.data, finalLogs.data, withdrawLogs.data, isOwner, me, wallet.balance])
+  }, [reads.data, chainNow, bidLogs, myClaims, finalLogs, withdrawLogs, isOwner, me, wallet.balance])
 
   // ---- Writes -------------------------------------------------------------------
   const refreshAll = useCallback(
-    () => Promise.all([refetchReads(), bidLogs.refetch(), myClaims.refetch(), finalLogs.refetch(), withdrawLogs.refetch()]),
-    [refetchReads, bidLogs, myClaims, finalLogs, withdrawLogs],
+    (upTo: bigint) => Promise.all([refetchReads(), syncLogs(upTo)]),
+    [refetchReads, syncLogs],
   )
 
   const send = useCallback(
@@ -249,7 +220,7 @@ export function useChainAuction(): UseAuctionResult {
         setTx({ status: 'pending', action, message: 'Waiting for the network to confirm…' })
         const receipt = await client.waitForTransactionReceipt({ hash })
         if (receipt.status !== 'success') throw new Error('The transaction was included but failed.')
-        await refreshAll()
+        await refreshAll(receipt.blockNumber)
         setTx({ status: 'success', action, message: done })
         return true
       } catch (e) {
@@ -295,9 +266,78 @@ export function useChainAuction(): UseAuctionResult {
 
   const problem = reads.error
     ? `Can't read the auction contract at ${auction.address} on ${NETWORK_NAME}. Check VITE_AUCTION_ADDRESS, and that the contract is deployed on this network.`
-    : bidLogs.error
-      ? `Can't load the bid history. If you are on Sepolia, set VITE_AUCTION_DEPLOY_BLOCK to the contract's deploy block.`
+    : logsError
+      ? `Can't load the bid history from the RPC (${(logsError as { shortMessage?: string }).shortMessage ?? String(logsError)}). On Sepolia, check VITE_AUCTION_DEPLOY_BLOCK and VITE_SEPOLIA_RPC_URL.`
       : null
 
   return { view, actions, tx, status: reads.data ? 'ready' : reads.error ? 'error' : 'loading', problem }
+}
+
+// ---- Event log sync -------------------------------------------------------------
+
+/**
+ * Blocks per eth_getLogs request. Alchemy's free tier refuses ranges over 10 blocks,
+ * so the history is fetched in chunks, a few chunks at a time.
+ */
+const LOG_CHUNK = 10n
+const LOG_PARALLEL = 5
+
+type AuctionLog = GetContractEventsReturnType<typeof auctionAbi>[number]
+
+function isEvent<N extends ContractEventName<typeof auctionAbi>>(name: N) {
+  return (log: AuctionLog): log is Extract<AuctionLog, { eventName: N }> => log.eventName === name
+}
+
+/**
+ * Every event the auction contract has emitted, kept up to date incrementally:
+ * the first sync backfills from the deploy block, later syncs only fetch new blocks.
+ */
+function useAuctionLogs(client: ReturnType<typeof usePublicClient>, head: bigint | undefined) {
+  const [logs, setLogs] = useState<AuctionLog[]>([])
+  const [error, setError] = useState<unknown>(null)
+  const nextRef = useRef(AUCTION_DEPLOY_BLOCK) // first block not fetched yet
+  const targetRef = useRef(-1n) // highest block asked for
+  const busyRef = useRef<Promise<void> | null>(null)
+
+  const sync = useCallback(
+    (upTo: bigint): Promise<void> => {
+      if (upTo > targetRef.current) targetRef.current = upTo
+      if (!client) return Promise.resolve()
+      // One sync at a time; a running sync picks up the raised target before it finishes.
+      if (busyRef.current) return busyRef.current
+      const run = async () => {
+        try {
+          while (nextRef.current <= targetRef.current) {
+            const ranges: [bigint, bigint][] = []
+            let from = nextRef.current
+            while (from <= targetRef.current && ranges.length < LOG_PARALLEL) {
+              const to = from + LOG_CHUNK - 1n < targetRef.current ? from + LOG_CHUNK - 1n : targetRef.current
+              ranges.push([from, to])
+              from = to + 1n
+            }
+            const batches = await Promise.all(
+              ranges.map(([fromBlock, toBlock]) => client.getContractEvents({ ...auction, fromBlock, toBlock })),
+            )
+            nextRef.current = from
+            const found = batches.flat()
+            if (found.length) setLogs((prev) => [...prev, ...found])
+          }
+          setError(null)
+        } catch (e) {
+          setError(e) // retried on the next block, from the first missing block
+        } finally {
+          busyRef.current = null
+        }
+      }
+      busyRef.current = run()
+      return busyRef.current
+    },
+    [client],
+  )
+
+  useEffect(() => {
+    if (head !== undefined) void sync(head)
+  }, [head, sync])
+
+  return { logs, error, sync }
 }
