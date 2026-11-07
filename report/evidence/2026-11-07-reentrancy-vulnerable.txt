@@ -1,0 +1,73 @@
+# forge test --match-contract ReentrancyVulnerableTest -vvvv  (2026-11-07T14:57Z, forge 1.9.0, solc 0.8.28)
+# BEFORE: vulnerable contract (no guard, pays before clearing state) is drained
+No files changed, compilation skipped
+
+Ran 1 test for test/ReentrancyVulnerable.t.sol:ReentrancyVulnerableTest
+[PASS] test_ReentrantClaimDrainsVulnerableContract() (gas: 551794)
+Traces:
+  [556594] ReentrancyVulnerableTest::test_ReentrantClaimDrainsVulnerableContract()
+    ├─ [241833] → new DrainingBidder@0x2e234DAe75C793f67A35089C9d99245E1C58470b
+    │   └─ ← [Return] 869 bytes of code
+    ├─ [0] VM::prank(alice: [0x328809Bc894f92807417D2dAD6b7C998c1aFdac6])
+    │   └─ ← [Return]
+    ├─ [43433] VulnerableRefunds::bid{value: 5000000000000000000}()
+    │   └─ ← [Stop]
+    ├─ [53150] DrainingBidder::placeBid{value: 1000000000000000000}()
+    │   ├─ [22369] VulnerableRefunds::bid{value: 1000000000000000000}()
+    │   │   └─ ← [Stop]
+    │   └─ ← [Stop]
+    ├─ [104769] DrainingBidder::attack()
+    │   ├─ [80691] VulnerableRefunds::claim()
+    │   │   ├─ [71268] DrainingBidder::receive{value: 1000000000000000000}()
+    │   │   │   ├─ [494] VulnerableRefunds::commitments(DrainingBidder: [0x2e234DAe75C793f67A35089C9d99245E1C58470b]) [staticcall]
+    │   │   │   │   └─ ← [Return] 1000000000000000000 [1e18]
+    │   │   │   ├─ [47688] VulnerableRefunds::claim()
+    │   │   │   │   ├─ [40265] DrainingBidder::receive{value: 1000000000000000000}()
+    │   │   │   │   │   ├─ [494] VulnerableRefunds::commitments(DrainingBidder: [0x2e234DAe75C793f67A35089C9d99245E1C58470b]) [staticcall]
+    │   │   │   │   │   │   └─ ← [Return] 1000000000000000000 [1e18]
+    │   │   │   │   │   ├─ [38585] VulnerableRefunds::claim()
+    │   │   │   │   │   │   ├─ [31162] DrainingBidder::receive{value: 1000000000000000000}()
+    │   │   │   │   │   │   │   ├─ [494] VulnerableRefunds::commitments(DrainingBidder: [0x2e234DAe75C793f67A35089C9d99245E1C58470b]) [staticcall]
+    │   │   │   │   │   │   │   │   └─ ← [Return] 1000000000000000000 [1e18]
+    │   │   │   │   │   │   │   ├─ [29482] VulnerableRefunds::claim()
+    │   │   │   │   │   │   │   │   ├─ [22059] DrainingBidder::receive{value: 1000000000000000000}()
+    │   │   │   │   │   │   │   │   │   ├─ [494] VulnerableRefunds::commitments(DrainingBidder: [0x2e234DAe75C793f67A35089C9d99245E1C58470b]) [staticcall]
+    │   │   │   │   │   │   │   │   │   │   └─ ← [Return] 1000000000000000000 [1e18]
+    │   │   │   │   │   │   │   │   │   ├─ [20379] VulnerableRefunds::claim()
+    │   │   │   │   │   │   │   │   │   │   ├─ [12956] DrainingBidder::receive{value: 1000000000000000000}()
+    │   │   │   │   │   │   │   │   │   │   │   ├─ [494] VulnerableRefunds::commitments(DrainingBidder: [0x2e234DAe75C793f67A35089C9d99245E1C58470b]) [staticcall]
+    │   │   │   │   │   │   │   │   │   │   │   │   └─ ← [Return] 1000000000000000000 [1e18]
+    │   │   │   │   │   │   │   │   │   │   │   ├─ [11276] VulnerableRefunds::claim()
+    │   │   │   │   │   │   │   │   │   │   │   │   ├─ [1053] DrainingBidder::receive{value: 1000000000000000000}()
+    │   │   │   │   │   │   │   │   │   │   │   │   │   ├─ [494] VulnerableRefunds::commitments(DrainingBidder: [0x2e234DAe75C793f67A35089C9d99245E1C58470b]) [staticcall]
+    │   │   │   │   │   │   │   │   │   │   │   │   │   │   └─ ← [Return] 1000000000000000000 [1e18]
+    │   │   │   │   │   │   │   │   │   │   │   │   │   └─ ← [Stop]
+    │   │   │   │   │   │   │   │   │   │   │   │   └─ ← [Stop]
+    │   │   │   │   │   │   │   │   │   │   │   └─ ← [Stop]
+    │   │   │   │   │   │   │   │   │   │   └─ ← [Stop]
+    │   │   │   │   │   │   │   │   │   └─ ← [Stop]
+    │   │   │   │   │   │   │   │   └─ ← [Stop]
+    │   │   │   │   │   │   │   └─ ← [Stop]
+    │   │   │   │   │   │   └─ ← [Stop]
+    │   │   │   │   │   └─ ← [Stop]
+    │   │   │   │   └─ ← [Stop]
+    │   │   │   └─ ← [Stop]
+    │   │   └─ ← [Stop]
+    │   └─ ← [Stop]
+    ├─ [2260] DrainingBidder::reentries() [staticcall]
+    │   └─ ← [Return] 5
+    ├─ [2494] VulnerableRefunds::commitments(alice: [0x328809Bc894f92807417D2dAD6b7C998c1aFdac6]) [staticcall]
+    │   └─ ← [Return] 5000000000000000000 [5e18]
+    ├─ [0] VM::prank(alice: [0x328809Bc894f92807417D2dAD6b7C998c1aFdac6])
+    │   └─ ← [Return]
+    ├─ [0] VM::expectRevert(transfer failed)
+    │   └─ ← [Return]
+    ├─ [30423] VulnerableRefunds::claim()
+    │   ├─ [0] alice::receive{value: 5000000000000000000}()
+    │   │   └─ ← [OutOfFunds] EvmError: OutOfFunds
+    │   └─ ← [Revert] transfer failed
+    └─ ← [Stop]
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 613.46µs (186.54µs CPU time)
+
+Ran 1 test suite in 4.64ms (613.46µs CPU time): 1 tests passed, 0 failed, 0 skipped (1 total tests)

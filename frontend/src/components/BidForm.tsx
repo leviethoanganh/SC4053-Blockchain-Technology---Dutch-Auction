@@ -4,7 +4,7 @@ import { tokensFor } from '../lib/auction'
 import { formatUnits, parseEth } from '../lib/format'
 import type { AuctionActions, AuctionView, TxState } from '../types'
 
-const QUICK_AMOUNTS = ['0.01', '0.05', '0.1']
+const QUICK_AMOUNTS = ['0.0001', '0.0005', '0.001']
 
 export function BidForm({ view, actions, tx }: { view: AuctionView; actions: AuctionActions; tx: TxState }) {
   const [amount, setAmount] = useState('')

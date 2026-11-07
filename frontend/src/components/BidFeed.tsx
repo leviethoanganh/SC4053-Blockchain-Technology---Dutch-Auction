@@ -33,7 +33,7 @@ export function BidFeed({ view }: { view: AuctionView }) {
                     <span className="feed__bidder">{b.isMine ? 'You' : shortAddress(b.bidder)}</span>
                     {b.isThreshold && <span className="tag">Sold out the auction, partly refunded</span>}
                   </td>
-                  <td className="num">{formatUnits(b.amount, 4)} ETH</td>
+                  <td className="num">{formatUnits(b.amount, 8)} ETH</td>
                   <td className="num">{formatPrice(b.price)}</td>
                   <td className="num">{formatClock(b.at)}</td>
                 </tr>

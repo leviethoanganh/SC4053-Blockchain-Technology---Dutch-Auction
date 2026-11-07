@@ -17,8 +17,8 @@ import {DutchAuction} from "../src/DutchAuction.sol";
 contract Deploy is Script {
     // Must match frontend/src/config.ts
     uint256 constant SUPPLY = 1_000e18; // 1,000 TLP
-    uint256 constant START_PRICE = 0.001 ether; // per TLP
-    uint256 constant RESERVE_PRICE = 0.0001 ether; // per TLP
+    uint256 constant START_PRICE = 0.00001 ether; // per TLP
+    uint256 constant RESERVE_PRICE = 0.000001 ether; // per TLP
 
     function run() external returns (DutchAuction auction) {
         bool startNow = vm.envOr("START_AUCTION", false);

@@ -21,6 +21,14 @@ export interface Position {
   claimed: boolean
 }
 
+/** Only set when the connected wallet is the contract owner. */
+export interface OwnerView {
+  /** ETH from claims so far that the owner can withdraw now. */
+  proceeds: bigint
+  /** ETH the owner has already withdrawn (from ProceedsWithdrawn events). */
+  withdrawn: bigint
+}
+
 export interface Account {
   address: string
   balance: bigint
@@ -50,9 +58,11 @@ export interface AuctionView {
   bids: FeedBid[]
   account: Account | null
   position: Position | null
+  /** Real contract only, and only for the owner's wallet. */
+  owner: OwnerView | null
 }
 
-export type TxAction = 'connect' | 'start' | 'bid' | 'finalize' | 'claim'
+export type TxAction = 'connect' | 'start' | 'bid' | 'finalize' | 'claim' | 'withdraw'
 
 export type TxState =
   | { status: 'idle' }
@@ -69,6 +79,8 @@ export interface AuctionActions {
   claim: () => Promise<void>
   /** Owner only: starts the 20-minute timer. Only on the real contract. */
   start?: () => Promise<void>
+  /** Owner only: sends the claimed sale proceeds to the owner. Only on the real contract. */
+  withdrawProceeds?: () => Promise<void>
 }
 
 export interface DemoControls {

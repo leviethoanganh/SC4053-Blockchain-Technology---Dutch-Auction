@@ -32,7 +32,7 @@ import { useWallet } from '../wallet/WalletContext'
 
 const chainId = TARGET_CHAIN.id
 
-type FunctionName = 'start' | 'bid' | 'finalize' | 'claim'
+type FunctionName = 'start' | 'bid' | 'finalize' | 'claim' | 'withdrawProceeds'
 
 export function useChainAuction(): UseAuctionResult {
   const wallet = useWallet()
@@ -69,6 +69,8 @@ export function useChainAuction(): UseAuctionResult {
       { ...auction, chainId, functionName: 'reservePrice' },
       { ...auction, chainId, functionName: 'totalSupply' },
       { ...auction, chainId, functionName: 'DURATION' },
+      { ...auction, chainId, functionName: 'owner' },
+      { ...auction, chainId, functionName: 'proceeds' },
     ],
   })
   const { refetch: refetchReads } = reads
@@ -105,6 +107,16 @@ export function useChainAuction(): UseAuctionResult {
     queryKey: ['auction-final', auction.address, chainId, isFinalized],
     enabled: Boolean(client && isFinalized),
     queryFn: () => client!.getContractEvents({ ...auction, eventName: 'AuctionFinalized', fromBlock: AUCTION_DEPLOY_BLOCK }),
+  })
+
+  const ownerAddress = reads.data?.[11]
+  const isOwner = me !== undefined && ownerAddress !== undefined && me.toLowerCase() === ownerAddress.toLowerCase()
+  const withdrawLogs = useQuery({
+    queryKey: ['auction-withdrawals', auction.address, chainId, blockKey],
+    enabled: Boolean(client && block && isOwner),
+    placeholderData: (prev) => prev,
+    queryFn: () =>
+      client!.getContractEvents({ ...auction, eventName: 'ProceedsWithdrawn', fromBlock: AUCTION_DEPLOY_BLOCK, toBlock: block!.number }),
   })
 
   // ---- Build the view -----------------------------------------------------------
@@ -179,6 +191,9 @@ export function useChainAuction(): UseAuctionResult {
     }
 
     const finalEvent = finalLogs.data?.at(-1)?.args
+    const owner = isOwner
+      ? { proceeds: d?.[12] ?? 0n, withdrawn: (withdrawLogs.data ?? []).reduce((sum, l) => sum + l.args.amount!, 0n) }
+      : null
 
     return {
       mode: 'chain',
@@ -200,13 +215,14 @@ export function useChainAuction(): UseAuctionResult {
       bids,
       account: me ? { address: me, balance: wallet.balance ?? 0n } : null,
       position,
+      owner,
     }
-  }, [reads.data, chainNow, bidLogs.data, myClaims.data, finalLogs.data, me, wallet.balance])
+  }, [reads.data, chainNow, bidLogs.data, myClaims.data, finalLogs.data, withdrawLogs.data, isOwner, me, wallet.balance])
 
   // ---- Writes -------------------------------------------------------------------
   const refreshAll = useCallback(
-    () => Promise.all([refetchReads(), bidLogs.refetch(), myClaims.refetch(), finalLogs.refetch()]),
-    [refetchReads, bidLogs, myClaims, finalLogs],
+    () => Promise.all([refetchReads(), bidLogs.refetch(), myClaims.refetch(), finalLogs.refetch(), withdrawLogs.refetch()]),
+    [refetchReads, bidLogs, myClaims, finalLogs, withdrawLogs],
   )
 
   const send = useCallback(
@@ -269,6 +285,9 @@ export function useChainAuction(): UseAuctionResult {
       },
       start: async () => {
         await send('start', 'start', 'Auction started. The price is now falling.')
+      },
+      withdrawProceeds: async () => {
+        await send('withdraw', 'withdrawProceeds', 'Proceeds sent to the owner wallet.')
       },
     }),
     [wallet, send],

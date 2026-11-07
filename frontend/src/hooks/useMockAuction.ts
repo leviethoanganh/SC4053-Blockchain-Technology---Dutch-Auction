@@ -28,13 +28,13 @@ const STARTED_MINUTES_AGO = 6
 
 // Other bidders. They appear in the feed as the clock reaches their time.
 const SEED_BIDS: RawBid[] = [
-  { id: 's1', bidder: '0x51C4e8a0f3B9d2E7a6C1b0D9e8F7a6B5c4D3e2F1', amount: parseEth('0.04'), at: 15 },
-  { id: 's2', bidder: '0x9E02b7C6d5A4f3E2b1C0a9D8e7F6a5B4c3D2e1A0', amount: parseEth('0.025'), at: 70 },
-  { id: 's3', bidder: '0x3dA1f0E9c8B7a6D5e4F3a2B1c0D9e8F7a6B5c4D3', amount: parseEth('0.06'), at: 140 },
-  { id: 's4', bidder: '0xC7b6A5d4E3f2A1b0C9d8E7f6A5b4C3d2E1f0A9b8', amount: parseEth('0.05'), at: 222 },
-  { id: 's5', bidder: '0x51C4e8a0f3B9d2E7a6C1b0D9e8F7a6B5c4D3e2F1', amount: parseEth('0.035'), at: 301 },
-  { id: 's6', bidder: '0x0B8e7D6c5F4a3E2d1C0b9A8f7E6d5C4b3A2f1E0d', amount: parseEth('0.03'), at: 460 },
-  { id: 's7', bidder: '0x6F5e4D3c2B1a0F9e8D7c6B5a4F3e2D1c0B9a8F7e', amount: parseEth('0.045'), at: 610 },
+  { id: 's1', bidder: '0x51C4e8a0f3B9d2E7a6C1b0D9e8F7a6B5c4D3e2F1', amount: parseEth('0.0004'), at: 15 },
+  { id: 's2', bidder: '0x9E02b7C6d5A4f3E2b1C0a9D8e7F6a5B4c3D2e1A0', amount: parseEth('0.00025'), at: 70 },
+  { id: 's3', bidder: '0x3dA1f0E9c8B7a6D5e4F3a2B1c0D9e8F7a6B5c4D3', amount: parseEth('0.0006'), at: 140 },
+  { id: 's4', bidder: '0xC7b6A5d4E3f2A1b0C9d8E7f6A5b4C3d2E1f0A9b8', amount: parseEth('0.0005'), at: 222 },
+  { id: 's5', bidder: '0x51C4e8a0f3B9d2E7a6C1b0D9e8F7a6B5c4D3e2F1', amount: parseEth('0.00035'), at: 301 },
+  { id: 's6', bidder: '0x0B8e7D6c5F4a3E2d1C0b9A8f7E6d5C4b3A2f1E0d', amount: parseEth('0.0003'), at: 460 },
+  { id: 's7', bidder: '0x6F5e4D3c2B1a0F9e8D7c6B5a4F3e2D1c0B9a8F7e', amount: parseEth('0.00045'), at: 610 },
 ]
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -101,6 +101,7 @@ export function useMockAuction(): UseAuctionResult {
         .reverse(),
       account: me ? { address: me, balance } : null,
       position,
+      owner: null,
     }
   }, [outcome, elapsedSec, finalized, me, balance, claimed])
 

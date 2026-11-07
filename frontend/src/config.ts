@@ -18,7 +18,7 @@ export const NETWORK_NAME = TARGET_CHAIN.id === foundry.id ? 'Local Anvil' : 'Se
 
 export const AUCTION_PARAMS: AuctionParams = {
   totalSupply: 1_000n * WAD, // 1,000 TLP (18 decimals)
-  startPrice: parseEth('0.001'), // wei per whole TLP
-  reservePrice: parseEth('0.0001'), // wei per whole TLP
+  startPrice: parseEth('0.00001'), // wei per whole TLP
+  reservePrice: parseEth('0.000001'), // wei per whole TLP
   durationSec: 20 * 60, // exactly 20 minutes
 }

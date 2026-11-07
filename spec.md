@@ -23,8 +23,8 @@ The brief's "tricky points", and our answers, are in §4.
 | --- | --- | --- |
 | Token | Tulip (TLP), 18 decimals | `AuctionToken`, OpenZeppelin `ERC20` + `ERC20Burnable` |
 | Total supply `S` | 1,000 TLP (`1000e18`) | All minted to the auction contract at deploy |
-| Start price `P0` | 0.001 ETH per TLP | wei per whole token (1e18 units) |
-| Reserve price `Pr` | 0.0001 ETH per TLP | Price never goes below this |
+| Start price `P0` | 0.00001 ETH per TLP | wei per whole token (1e18 units) |
+| Reserve price `Pr` | 0.000001 ETH per TLP | Price never goes below this |
 | Duration `D` | 20 minutes (1,200 s) | Exactly, measured with `block.timestamp` |
 
 Prices are set in the constructor so tests can use other values. The frontend's `src/config.ts` must match the deployed values.
